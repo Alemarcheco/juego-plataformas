@@ -12,16 +12,16 @@ Future<void> main() async {
   ]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   await Progreso.cargar();
-  runApp(const AventurasDePaco());
+  runApp(const PaquitoAdventure());
 }
 
-class AventurasDePaco extends StatelessWidget {
-  const AventurasDePaco({super.key});
+class PaquitoAdventure extends StatelessWidget {
+  const PaquitoAdventure({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Las aventuras de Paco',
+      title: 'Paquito Adventure',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(

@@ -100,10 +100,32 @@ import 'package:paco_aventuras/juego/motor.dart';
 }
 
 void main() {
-  test('Hay 80 niveles', () {
-    expect(todosLosNiveles.length, 80);
-    for (var i = 0; i < 80; i++) {
+  test('Hay 80 niveles y 8 secretos', () {
+    expect(todosLosNiveles.length, 88);
+    for (var i = 0; i < 88; i++) {
       expect(todosLosNiveles[i].indice, i);
+    }
+  });
+
+  test('Yendo hacia atrás en el 9-5 se encuentra el mundo secreto', () {
+    final n = todosLosNiveles.firstWhere((n) => n.mundo == 9 && n.numero == 5);
+    final m = Motor(n);
+    m.enemigos.clear();
+    for (var i = 0; i < 60 * 6 && m.estado == Estado.jugando; i++) {
+      m.mandos.izquierda = true;
+      m.actualizar(1 / 60);
+    }
+    expect(m.secretoEncontrado, isTrue);
+  });
+
+  test('Los perros especiales disparan y no rompen nada', () {
+    for (final n in todosLosNiveles) {
+      final m = Motor(n);
+      for (var i = 0; i < 60 * 20; i++) {
+        m.mandos.derecha = i % 200 < 150;
+        m.mandos.salto = i % 40 < 10;
+        m.actualizar(1 / 60);
+      }
     }
   });
 

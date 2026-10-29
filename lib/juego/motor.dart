@@ -27,13 +27,26 @@ class Enemigo extends Cuerpo {
   double aplastado = 0; // tiempo de la animación al morir
   double espera = 0;
   bool activo = false;
+  double disparo = 2;
+
+  /// El perro de espinas se infla antes de explotar.
+  double inflar = 0;
 
   Enemigo(this.tipo, double x, double y, double w, double h, this.t)
       : baseX = x,
         baseY = y,
         super(x, y, w, h);
 
-  bool get pisable => tipo != TipoEnemigo.fuego;
+  bool get pisable => tipo != TipoEnemigo.fuego && tipo != TipoEnemigo.espinoso;
+
+  bool get camina => const {
+        TipoEnemigo.perro,
+        TipoEnemigo.saltarin,
+        TipoEnemigo.hielo,
+        TipoEnemigo.llamas,
+        TipoEnemigo.acido,
+        TipoEnemigo.espinoso,
+      }.contains(tipo);
 }
 
 class JefeVivo extends Cuerpo {
@@ -45,16 +58,57 @@ class JefeVivo extends Cuerpo {
   double lanzar = 2;
   double derrotado = 0;
   bool activo = false;
+  double t = 0;
+
+  /// Embestida: se prepara (tiembla), corre y luego se queda mareado.
+  ModoJefe modo = ModoJefe.normal;
+  double tiempoModo = 0;
+  double cargar = 3;
+  double soltar = 1;
+  bool enAire = false;
+  int ataque = 0;
+
+  /// Jefes con jetpack que también caminan (el Perro Supremo) alternan
+  /// entre andar y volar.
+  bool faseVuelo = false;
+  double tiempoFase = 9;
+
   JefeVivo(this.datos, double x, double y)
       : vidas = datos.vidas,
-        super(x, y, 1.8, 1.6);
+        super(x, y, 1.8 * datos.tamano, 1.6 * datos.tamano);
 }
 
-class Hueso extends Cuerpo {
+enum ModoJefe { normal, preparando, embistiendo, mareado }
+
+/// Algo que lanza un jefe y hace daño a Paco.
+class Proyectil extends Cuerpo {
+  final TipoProyectil tipo;
+  final double gravedad;
   double giro = 0;
-  Hueso(double x, double y, double vx) : super(x, y, 0.6, 0.35) {
+  bool fuera = false;
+
+  /// Tiempo de aviso antes de salir (las bolas de fuego del suelo).
+  double espera;
+
+  /// Tiempo hasta dividirse en 8 espinas (los copos de nieve).
+  double dividir;
+
+  /// Si es mayor que 0, desaparece al acabarse (las llamas).
+  double vida;
+
+  /// Quita todas las vidas de golpe (el ácido).
+  final bool mortal;
+  Proyectil(this.tipo, double x, double y, double w, double h,
+      {double vx = 0,
+      double vy = 0,
+      this.gravedad = 0,
+      this.espera = 0,
+      this.dividir = 0,
+      this.vida = 0,
+      this.mortal = false})
+      : super(x, y, w, h) {
     this.vx = vx;
-    vy = -9;
+    this.vy = vy;
   }
 }
 
@@ -71,9 +125,9 @@ enum Estado { jugando, muerto, ganado }
 class Motor {
   final Nivel nivel;
   late Mapa mapa;
-  late Cuerpo paco;
+  Cuerpo paco = Cuerpo(0, 0, 0.8, 0.9);
   final List<Enemigo> enemigos = [];
-  final List<Hueso> huesos = [];
+  final List<Proyectil> proyectiles = [];
   JefeVivo? jefe;
   final Mandos mandos = Mandos();
 
@@ -87,6 +141,9 @@ class Motor {
   double tiempoGanado = 0;
   bool control = false;
   bool puertaCerrada = false;
+
+  /// Paco entró en el portal del mundo secreto.
+  bool secretoEncontrado = false;
   int dirPaco = 1;
   double pasos = 0;
 
@@ -98,7 +155,9 @@ class Motor {
   double _bufferSalto = 0;
   bool _saltoAntes = false;
 
-  bool get enAgua => nivel.tipo == TipoNivel.agua;
+  bool get enAgua =>
+      nivel.tipo == TipoNivel.agua ||
+      (nivel.arenaAcuatica && mapa.arenaX != null && paco.x > mapa.arenaX! - 1);
 
   Motor(this.nivel) {
     mapa = generarMapa(nivel);
@@ -121,13 +180,17 @@ class Motor {
 
   void _crearEnemigos() {
     enemigos.clear();
-    huesos.clear();
+    proyectiles.clear();
     final rnd = Random(nivel.indice);
     for (final a in mapa.enemigos) {
       final fase = rnd.nextDouble() * 6;
       switch (a.tipo) {
         case TipoEnemigo.perro:
         case TipoEnemigo.saltarin:
+        case TipoEnemigo.hielo:
+        case TipoEnemigo.llamas:
+        case TipoEnemigo.acido:
+        case TipoEnemigo.espinoso:
           enemigos.add(Enemigo(a.tipo, a.x, a.y - 0.8, 0.95, 0.8, fase));
         case TipoEnemigo.volador:
           enemigos.add(Enemigo(a.tipo, a.x, a.y, 0.9, 0.7, fase));
@@ -139,7 +202,7 @@ class Motor {
     }
     final datos = nivel.jefe;
     if (datos != null && mapa.arenaX != null) {
-      jefe = JefeVivo(datos, mapa.ancho - 6.0, mapa.sueloArena - 1.6);
+      jefe = JefeVivo(datos, mapa.ancho - 7.0, mapa.sueloArena - 1.6 * datos.tamano);
     }
   }
 
@@ -231,7 +294,7 @@ class Motor {
     _actualizarPaco(dt);
     _actualizarEnemigos(dt);
     _actualizarJefe(dt);
-    _actualizarHuesos(dt);
+    _actualizarProyectiles(dt);
     _camara();
   }
 
@@ -300,6 +363,9 @@ class Motor {
             if (p.y + p.h > y + 0.3) _morir();
           case Casilla.pinchos:
             if (p.y + p.h > y + 0.45) _herir(desdeX: x + 0.5);
+          case Casilla.portal:
+            secretoEncontrado = true;
+            _ganar();
           default:
             break;
         }
@@ -341,7 +407,12 @@ class Motor {
       switch (e.tipo) {
         case TipoEnemigo.perro:
         case TipoEnemigo.saltarin:
-          e.vx = e.dir * vel;
+        case TipoEnemigo.hielo:
+        case TipoEnemigo.llamas:
+        case TipoEnemigo.acido:
+        case TipoEnemigo.espinoso:
+          if (_atacaEnemigo(e, dt)) continue;
+          e.vx = e.dir * vel * (e.tipo == TipoEnemigo.perro || e.tipo == TipoEnemigo.saltarin ? 1 : 0.6);
           e.vy += (enAgua ? 11 : 40) * dt;
           if (e.vy > 18) e.vy = 18;
           if (e.tipo == TipoEnemigo.saltarin && e.enSuelo) {
@@ -385,6 +456,62 @@ class Motor {
     }
   }
 
+  /// Ataques de los perros especiales. Devuelve true si el perro ya no sigue.
+  bool _atacaEnemigo(Enemigo e, double dt) {
+    final dx = paco.centroX - e.centroX;
+    final dy = (paco.y + paco.h / 2) - (e.y + e.h / 2);
+    switch (e.tipo) {
+      case TipoEnemigo.espinoso:
+        if (e.inflar > 0) {
+          e.inflar += dt;
+          e.vx = 0;
+          if (e.inflar > 0.8) {
+            for (var k = 0; k < 8; k++) {
+              final a = k * pi / 4;
+              proyectiles.add(Proyectil(TipoProyectil.espina, e.centroX - 0.2,
+                  e.y + e.h / 2 - 0.2, 0.4, 0.4,
+                  vx: cos(a) * 6, vy: sin(a) * 6, vida: 0.6));
+            }
+            e.vivo = false;
+            e.aplastado = 1; // no deja cuerpo aplastado
+            return true;
+          }
+          _contacto(e);
+          return true;
+        }
+        if (dx.abs() < 2.6 && dy.abs() < 2) e.inflar = 0.001;
+      case TipoEnemigo.hielo:
+      case TipoEnemigo.llamas:
+      case TipoEnemigo.acido:
+        e.disparo -= dt;
+        final alcance = e.tipo == TipoEnemigo.llamas ? 5.0 : 10.0;
+        if (e.disparo <= 0 && dx.abs() < alcance && dy.abs() < 3) {
+          e.disparo = e.tipo == TipoEnemigo.llamas ? 1.8 : 2.8;
+          e.dir = dx > 0 ? 1 : -1;
+          final x = e.centroX + e.dir * 0.5 - 0.25;
+          final y = e.y + 0.15;
+          switch (e.tipo) {
+            case TipoEnemigo.hielo:
+              proyectiles.add(Proyectil(TipoProyectil.espinaNieve, x, y, 0.45, 0.35,
+                  vx: e.dir * 6.0, vy: -4, gravedad: 9));
+            case TipoEnemigo.llamas:
+              for (var k = 0; k < 3; k++) {
+                proyectiles.add(Proyectil(TipoProyectil.fuego, x, y + 0.1, 0.45, 0.45,
+                    vx: e.dir * (5.0 + k), vy: (k - 1) * 0.8, vida: 0.55));
+              }
+            case TipoEnemigo.acido:
+              proyectiles.add(Proyectil(TipoProyectil.acido, x, y, 0.45, 0.45,
+                  vx: e.dir * 4.0, mortal: true));
+            default:
+              break;
+          }
+        }
+      default:
+        break;
+    }
+    return false;
+  }
+
   /// Paco toca a un enemigo: o lo pisa o se hace daño.
   void _contacto(Cuerpo e) {
     final p = paco;
@@ -425,49 +552,251 @@ class Motor {
     }
     if (!j.activo) return;
     if (j.invencible > 0) j.invencible -= dt;
-    final furia = 1 - j.vidas / j.datos.vidas; // 0 al principio, ~1 al final
+    j.t += dt;
+    final d = j.datos;
+    final furia = 1 - j.vidas / d.vidas; // 0 al principio, ~1 al final
     final vel = 1.8 + dificultad * 0.1 + furia * 1.2;
     final arena = mapa.arenaX ?? 0;
-    if (j.x < arena + 1) j.dir = 1;
-    if (j.x > mapa.ancho - 3) j.dir = -1;
-    j.vx = j.dir * vel;
-    final g = enAgua ? 14.0 : 40.0;
-    j.vy += g * dt;
-    if (j.vy > 18) j.vy = 18;
-    if (j.enSuelo) {
-      j.espera -= dt;
-      if (j.espera <= 0) {
-        j.vy = enAgua ? -9 : -13;
-        j.espera = 1.2 + (1 - furia) * 1.3;
-        // Mira hacia Paco al saltar
-        j.dir = paco.centroX > j.centroX ? 1 : -1;
+    final haciaPaco = paco.centroX > j.centroX ? 1 : -1;
+
+    if (d.sabe(Habilidad.jetpack) && !d.sabe(Habilidad.volar) &&
+        j.modo == ModoJefe.normal) {
+      j.tiempoFase -= dt;
+      if (j.tiempoFase <= 0) {
+        j.faseVuelo = !j.faseVuelo;
+        j.tiempoFase = j.faseVuelo ? 6 : 9;
       }
     }
-    mover(j, dt);
-    if (j.chocoPared) j.dir = -j.dir;
-    if (j.datos.lanzaHuesos) {
+    final vuela = d.sabe(Habilidad.volar) || j.faseVuelo;
+    if (vuela) {
+      // Vuela o nada: sigue a Paco despacio y sube y baja para que se le pueda pisar.
+      j.dir = haciaPaco;
+      j.vx = (paco.centroX - j.centroX).clamp(-1.0, 1.0) * vel * 0.8;
+      final base = mapa.sueloArena - j.h - 2.6;
+      final objetivoY = base + sin(j.t * 1.3) * 2.5;
+      j.vy = (objetivoY - j.y) * 3;
+      mover(j, dt);
+      if (d.sabe(Habilidad.jetpack)) {
+        j.soltar -= dt;
+        if (j.soltar <= 0) {
+          j.soltar = 1.1 - furia * 0.4;
+          proyectiles.add(Proyectil(TipoProyectil.fuego,
+              j.centroX - j.dir * 0.7 - 0.25, j.abajo - 0.2, 0.5, 0.5,
+              vy: 1.2));
+        }
+      }
+    } else {
+      switch (j.modo) {
+        case ModoJefe.normal:
+          if (j.x < arena + 1) j.dir = 1;
+          if (j.x > mapa.ancho - 3) j.dir = -1;
+          j.vx = j.dir * vel;
+          if (d.sabe(Habilidad.saltar) && j.enSuelo) {
+            j.espera -= dt;
+            if (j.espera <= 0) {
+              j.vy = enAgua ? -9 : -13;
+              j.espera = 1.2 + (1 - furia) * 1.3;
+              j.dir = haciaPaco;
+            }
+          }
+          if (d.sabe(Habilidad.embestir) && j.enSuelo) {
+            j.cargar -= dt;
+            if (j.cargar <= 0) {
+              j.modo = ModoJefe.preparando;
+              j.tiempoModo = 0.8;
+              j.dir = haciaPaco;
+            }
+          }
+        case ModoJefe.preparando:
+          j.vx = 0;
+          j.tiempoModo -= dt;
+          if (j.tiempoModo <= 0) {
+            j.modo = ModoJefe.embistiendo;
+            j.tiempoModo = 2.0;
+          }
+        case ModoJefe.embistiendo:
+          j.vx = j.dir * (6.5 + furia * 2);
+          j.tiempoModo -= dt;
+          if (j.chocoPared || j.tiempoModo <= 0) {
+            j.modo = ModoJefe.mareado;
+            j.tiempoModo = 1.2;
+          }
+        case ModoJefe.mareado:
+          j.vx = 0;
+          j.tiempoModo -= dt;
+          if (j.tiempoModo <= 0) {
+            j.modo = ModoJefe.normal;
+            j.cargar = 3.5 - furia * 1.5;
+            j.dir = haciaPaco;
+          }
+      }
+      final g = enAgua ? 14.0 : 40.0;
+      j.vy += g * dt;
+      if (j.vy > 18) j.vy = 18;
+      mover(j, dt);
+      if (j.chocoPared && j.modo == ModoJefe.normal) j.dir = -j.dir;
+      // Al caer de un salto, onda por el suelo
+      if (j.enAire && j.enSuelo && d.sabe(Habilidad.onda)) {
+        for (final lado in [-1.0, 1.0]) {
+          proyectiles.add(Proyectil(TipoProyectil.onda,
+              j.centroX - 0.4 + lado * 0.9, mapa.sueloArena - 0.6, 0.8, 0.6,
+              vx: lado * 6));
+        }
+      }
+      j.enAire = !j.enSuelo;
+    }
+
+    // Ataques a distancia, uno detrás de otro
+    final ataques = [
+      if (d.sabe(Habilidad.lanzarArco)) Habilidad.lanzarArco,
+      if (d.sabe(Habilidad.disparar)) Habilidad.disparar,
+      if (d.sabe(Habilidad.lluvia)) Habilidad.lluvia,
+      if (d.sabe(Habilidad.erupcion)) Habilidad.erupcion,
+    ];
+    if (ataques.isNotEmpty && j.modo == ModoJefe.normal) {
       j.lanzar -= dt;
       if (j.lanzar <= 0) {
-        j.lanzar = 2.2 - furia;
-        final hacia = paco.centroX > j.centroX ? 1.0 : -1.0;
-        huesos.add(Hueso(j.centroX, j.y + 0.3, hacia * 6.5));
+        j.lanzar = 2.4 - furia * 0.9;
+        _atacar(j, ataques[j.ataque % ataques.length], haciaPaco, furia);
+        j.ataque++;
       }
     }
     if (estado == Estado.jugando) _contacto(j);
   }
 
-  void _actualizarHuesos(double dt) {
-    for (final h in huesos) {
-      h.vy += 20 * dt;
-      h.x += h.vx * dt;
-      h.y += h.vy * dt;
-      h.giro += dt * 10;
-      if (h.toca(paco)) {
-        _herir(desdeX: h.x);
-        h.y = 99;
+  static const _arcosSupremo = [
+    TipoProyectil.hueso,
+    TipoProyectil.espina,
+    TipoProyectil.pescado,
+    TipoProyectil.copo,
+    TipoProyectil.veneno,
+    TipoProyectil.estrella,
+  ];
+
+  void _atacar(JefeVivo j, Habilidad h, int hacia, double furia) {
+    var tipo = j.datos.proyectil;
+    if (j.datos.disfraz == Disfraz.supremo) {
+      // El Perro Supremo usa los ataques de todos los jefes
+      tipo = switch (h) {
+        Habilidad.disparar => TipoProyectil.laser,
+        Habilidad.lluvia => TipoProyectil.roca,
+        Habilidad.erupcion => TipoProyectil.fuego,
+        _ => _arcosSupremo[(j.ataque ~/ 4) % _arcosSupremo.length],
+      };
+    }
+    switch (h) {
+      case Habilidad.lanzarArco:
+        final distancia = (paco.centroX - j.centroX).abs();
+        final rapidez = (distancia * 0.9).clamp(3.0, 8.0);
+        final seRompe =
+            tipo == TipoProyectil.copo || tipo == TipoProyectil.veneno;
+        final cuantos = seRompe ? 1 : (furia > 0.5 ? 3 : 1);
+        for (var i = 0; i < cuantos; i++) {
+          proyectiles.add(Proyectil(tipo, j.centroX - 0.3, j.y + 0.2, 0.6, 0.4,
+              vx: hacia * (rapidez + i * 1.2),
+              vy: enAgua ? -5.0 - i : -9.0 - i,
+              gravedad: enAgua ? 8 : 20,
+              dividir: tipo == TipoProyectil.copo
+                  ? 0.9
+                  : tipo == TipoProyectil.veneno
+                      ? 1.1
+                      : 0));
+        }
+      case Habilidad.disparar:
+        final y = (paco.y + paco.h / 2 - 0.15)
+            .clamp(j.y, j.y + j.h - 0.3)
+            .toDouble();
+        proyectiles.add(Proyectil(tipo, j.centroX - 0.5, y, 1.0, 0.3,
+            vx: hacia * (enAgua ? 6.0 : 9.0)));
+      case Habilidad.lluvia:
+        final arriba = nivel.tipo == TipoNivel.fortaleza ? 2.0 : 1.0;
+        for (final dx in [-2.5, 0.0, 2.5]) {
+          proyectiles.add(Proyectil(tipo, paco.centroX + dx - 0.3, arriba, 0.6, 0.6,
+              gravedad: enAgua ? 6 : 12));
+        }
+      case Habilidad.erupcion:
+        // El suelo brilla un momento y luego sale el fuego
+        final cuantas = furia > 0.5 ? 3 : 2;
+        for (var i = 0; i < cuantas; i++) {
+          final x = paco.centroX - 0.35 + (i - (cuantas - 1) / 2) * 2.2;
+          proyectiles.add(Proyectil(TipoProyectil.fuego, x,
+              mapa.sueloArena - 0.7, 0.7, 0.7,
+              vy: -15, gravedad: 22, espera: 0.9));
+        }
+      default:
+        break;
+    }
+  }
+
+  void _actualizarProyectiles(double dt) {
+    final nuevos = <Proyectil>[];
+    for (final p in proyectiles) {
+      if (p.espera > 0) {
+        p.espera -= dt;
+        continue;
+      }
+      if (p.dividir > 0) {
+        p.dividir -= dt;
+        if (p.dividir <= 0) {
+          // El copo se rompe en 8 espinas de nieve; la burbuja de veneno
+          // explota en gotas
+          final copo = p.tipo == TipoProyectil.copo;
+          final trozos = copo ? 8 : 6;
+          for (var k = 0; k < trozos; k++) {
+            final a = k * 2 * pi / trozos - (copo ? 0 : pi / 2);
+            nuevos.add(Proyectil(
+                copo ? TipoProyectil.espinaNieve : TipoProyectil.gota,
+                p.centroX - 0.2,
+                p.y + p.h / 2 - 0.2,
+                0.4,
+                0.4,
+                vx: cos(a) * (copo ? 6 : 4.5),
+                vy: sin(a) * (copo ? 6 : 4.5) - (copo ? 0 : 3),
+                gravedad: copo ? 0 : 12));
+          }
+          p.fuera = true;
+          continue;
+        }
+      }
+      if (p.vida > 0) {
+        p.vida -= dt;
+        if (p.vida <= 0) {
+          p.fuera = true;
+          continue;
+        }
+      }
+      p.vy += p.gravedad * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.giro += dt * 8;
+      if (p.toca(paco)) {
+        if (p.mortal) {
+          if (invencible <= 0) _morir();
+        } else {
+          _herir(desdeX: p.centroX);
+        }
+        p.fuera = true;
+      }
+      final cx = p.centroX.floor();
+      final cy = p.abajo.floor();
+      if (p.tipo == TipoProyectil.onda) {
+        if (esSolida(mapa.en((p.x + (p.vx > 0 ? p.w : 0)).floor(), p.y.floor()))) {
+          p.fuera = true;
+        }
+      } else if (esSolida(mapa.en(cx, cy)) || esSolida(mapa.en(cx, p.y.floor()))) {
+        if (p.dividir > 0) {
+          p.dividir = 0.0001; // al tocar el suelo también se rompe
+          p.y -= 0.3;
+        } else if (!(p.gravedad > 0 && p.vy < 0)) {
+          p.fuera = true; // lo que sube desde el suelo no choca hasta bajar
+        }
+      }
+      if (p.y > Mapa.alto + 1 || p.x < camX - 4 || p.x > camX + anchoVista + 4) {
+        p.fuera = true;
       }
     }
-    huesos.removeWhere((h) => h.y > Mapa.alto + 2);
+    proyectiles.removeWhere((p) => p.fuera);
+    proyectiles.addAll(nuevos);
   }
 
   void _camara() {

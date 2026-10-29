@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../datos/mundos.dart';
+import '../progreso.dart';
 import 'generador.dart';
 import 'motor.dart';
 
@@ -31,14 +32,23 @@ class PintorJuego extends CustomPainter {
     canvas.save();
     canvas.translate(-cam * s, 0);
     _casillas(canvas, s, cam);
+    final arena = motor.mapa.arenaX;
+    if (motor.nivel.arenaAcuatica && arena != null) {
+      // La pelea con el jefe es dentro del mar
+      final x0 = (arena - 1) * s;
+      final ola = sin(motor.t * 2) * s * 0.1;
+      canvas.drawRect(
+          Rect.fromLTRB(x0, s * 2.5 + ola, motor.mapa.ancho * s, motor.mapa.sueloArena * s),
+          Paint()..color = (tema.liquido ?? Colors.blue).withValues(alpha: 0.45));
+    }
     _banderas(canvas, s);
     for (final e in motor.enemigos) {
       _enemigo(canvas, s, e);
     }
     final j = motor.jefe;
     if (j != null) _jefe(canvas, s, j);
-    for (final h in motor.huesos) {
-      _hueso(canvas, s, h);
+    for (final p in motor.proyectiles) {
+      _proyectil(canvas, s, p);
     }
     _paco(canvas, s);
     canvas.restore();
@@ -199,6 +209,66 @@ class PintorJuego extends CustomPainter {
           final cx = x + (motor.t * s * 3) % (s * 15);
           c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx, h * (0.2 + azar(i, 3) * 0.2), s * 1.2, s * 0.4), Radius.circular(s * 0.2)), rosa);
         });
+      case Decorado.cuadricula:
+        final rejilla = Paint()
+          ..color = const Color(0xFFB8C2CE)
+          ..strokeWidth = 1;
+        final paso = s * 2;
+        final despl = (cam * s * 0.5) % paso;
+        for (var x = -despl; x < size.width; x += paso) {
+          c.drawLine(Offset(x, 0), Offset(x, h), rejilla);
+        }
+        for (var y = 0.0; y < h; y += paso) {
+          c.drawLine(Offset(0, y), Offset(size.width, y), rejilla);
+        }
+        final azul = Paint()..color = const Color(0x332FA4FF);
+        final naranja = Paint()..color = const Color(0x33FF9A2F);
+        repetir(0.5, s * 12, (x, i) {
+          c.drawRect(Rect.fromLTWH(x, h * 0.2, s * 2, s * 4), i.isEven ? azul : naranja);
+        });
+      case Decorado.ciudadAbajo:
+        // La plataforma vuela muy por encima de la ciudad
+        final lejana = Paint()..color = const Color(0x553A2A8A);
+        final luz = Paint()..color = const Color(0x8834E0E0);
+        repetir(0.08, s * 2.5, (x, i) {
+          final alto = h * (0.12 + azar(i, 1) * 0.15);
+          c.drawRect(Rect.fromLTWH(x, h - alto, s * 1.8, alto), lejana);
+          c.drawRect(Rect.fromLTWH(x + s * 0.4, h - alto + s * 0.4, s * 0.3, s * 0.15), luz);
+        });
+        repetir(0.15, s * 9, (x, i) => _nube(c, x, h * (0.55 + azar(i, 2) * 0.25), s * 1.2, Paint()..color = Colors.white.withValues(alpha: 0.35)));
+      case Decorado.gigante:
+        // Hierba, flores y setas enormes: Paco es diminuto
+        final hierba = Paint()..color = const Color(0xFF5CC85A);
+        final hierbaOscura = Paint()..color = const Color(0xFF3A9A44);
+        repetir(0.25, s * 3, (x, i) {
+          final alto = h * (0.6 + azar(i, 1) * 0.35);
+          final hoja = Path()
+            ..moveTo(x - s * 0.8, h)
+            ..quadraticBezierTo(x + s * (azar(i, 2) - 0.5) * 3, h - alto * 0.6, x + s * (azar(i, 3) - 0.5) * 4, h - alto)
+            ..quadraticBezierTo(x + s * 0.2, h - alto * 0.5, x + s * 0.8, h)
+            ..close();
+          c.drawPath(hoja, i.isEven ? hierba : hierbaOscura);
+        });
+        repetir(0.12, s * 16, (x, i) {
+          final alto = h * (0.55 + azar(i, 4) * 0.2);
+          c.drawRect(Rect.fromLTWH(x - s * 0.3, h - alto, s * 0.6, alto), Paint()..color = const Color(0xFF4A9A3A));
+          final centro = Offset(x, h - alto);
+          final colores = [const Color(0xFFFF6B8A), const Color(0xFFFFD23F), const Color(0xFFB08AFF)];
+          final petalo = Paint()..color = colores[i.abs() % 3];
+          for (var k = 0; k < 6; k++) {
+            final a = k * pi / 3;
+            c.drawCircle(centro + Offset(cos(a) * s * 1.6, sin(a) * s * 1.6), s * 1.2, petalo);
+          }
+          c.drawCircle(centro, s * 1.1, Paint()..color = const Color(0xFFFFB020));
+        });
+        repetir(0.18, s * 23, (x, i) {
+          c.drawRect(Rect.fromLTWH(x - s * 0.8, h - s * 4, s * 1.6, s * 4), Paint()..color = const Color(0xFFF4E8D0));
+          c.drawArc(Rect.fromCenter(center: Offset(x, h - s * 4), width: s * 7, height: s * 5), pi, pi, true,
+              Paint()..color = const Color(0xFFE0403A));
+          for (var k = 0; k < 3; k++) {
+            c.drawCircle(Offset(x - s * 1.8 + k * s * 1.8, h - s * 5.2 + (k % 2) * s * 0.6), s * 0.45, Paint()..color = Colors.white);
+          }
+        });
       case Decorado.volcanes:
         repetir(0.12, s * 14, (x, i) {
           final alto = h * (0.45 + azar(i, 1) * 0.2);
@@ -321,6 +391,23 @@ class PintorJuego extends CustomPainter {
           case Casilla.corazon:
             final late = 1 + sin(motor.t * 6) * 0.08;
             _corazon(c, r.center, s * 0.35 * late, Paint()..color = const Color(0xFFFF4D6D));
+          case Casilla.falso:
+            // Pared falsa: se ve como tierra, pero se aclara al entrar
+            final dentro = motor.paco.x < anchoSecreto + 0.5;
+            c.drawRect(r, Paint()..color = tema.tierra.withValues(alpha: dentro ? 0.3 : 1));
+            if (!dentro && (x * 7 + y * 3) % 5 == 0) {
+              c.drawCircle(r.center + Offset(s * 0.15, s * 0.1), s * 0.1, manchas);
+            }
+          case Casilla.portal:
+            if (m.en(x, y + 1) == Casilla.portal) {
+              final centro = Offset(r.center.dx, r.bottom);
+              final giro = motor.t * 2;
+              for (var k = 3; k >= 1; k--) {
+                c.drawOval(Rect.fromCenter(center: centro, width: s * 0.5 * k, height: s * 0.85 * k),
+                    Paint()
+                      ..color = HSVColor.fromAHSV(1, (giro * 60 + k * 70) % 360, 0.7, 1).toColor());
+              }
+            }
           case Casilla.vacio:
             break;
         }
@@ -401,10 +488,12 @@ class PintorJuego extends CustomPainter {
     }
     c.scale(dir, 1);
     final u = s; // una casilla
-    final naranja = Paint()..color = const Color(0xFFF59A33);
-    final oscuro = Paint()..color = const Color(0xFFD9741A);
-    final crema = Paint()..color = const Color(0xFFFFE2B8);
+    final skin = Progreso.skin;
+    final naranja = Paint()..color = skin.cuerpo;
+    final oscuro = Paint()..color = skin.oscuro;
+    final crema = Paint()..color = skin.crema;
     final negro = Paint()..color = const Color(0xFF1F2A3A);
+    final ojos = Paint()..color = skin.ojos;
 
     final enAire = !p.enSuelo && !motor.enAgua;
     final paso = motor.pasos * 2.2;
@@ -418,7 +507,7 @@ class PintorJuego extends CustomPainter {
     c.drawPath(
         cola,
         Paint()
-          ..color = const Color(0xFFD9741A)
+          ..color = skin.oscuro
           ..style = PaintingStyle.stroke
           ..strokeWidth = u * 0.14
           ..strokeCap = StrokeCap.round);
@@ -429,7 +518,7 @@ class PintorJuego extends CustomPainter {
               Rect.fromLTWH(-u * 0.25 + k * u * 0.15 + pata * k * u, -u * 0.25,
                   u * 0.16, u * 0.25),
               Radius.circular(u * 0.07)),
-          k > 0 ? naranja : oscuro);
+          k > 0 && !skin.puntas ? naranja : oscuro);
     }
     // Cuerpo
     c.drawRRect(
@@ -440,7 +529,7 @@ class PintorJuego extends CustomPainter {
     c.drawOval(Rect.fromLTWH(-u * 0.12, -u * 0.48, u * 0.36, u * 0.26), crema);
     // Rayas
     final raya = Paint()
-      ..color = const Color(0xFFD9741A)
+      ..color = skin.puntas ? skin.cuerpo : skin.oscuro
       ..strokeWidth = u * 0.05
       ..strokeCap = StrokeCap.round;
     c.drawLine(Offset(-u * 0.25, -u * 0.6), Offset(-u * 0.22, -u * 0.48), raya);
@@ -458,9 +547,14 @@ class PintorJuego extends CustomPainter {
       ..lineTo(cab.dx + u * 0.27, cab.dy - u * 0.08)
       ..close();
     c.drawPath(orejaI, oscuro);
-    c.drawPath(orejaD, naranja);
+    c.drawPath(orejaD, skin.puntas ? oscuro : naranja);
     c.drawCircle(cab, u * 0.28, naranja);
-    c.drawOval(Rect.fromCenter(center: cab + Offset(u * 0.12, u * 0.1), width: u * 0.3, height: u * 0.2), crema);
+    if (skin.puntas) {
+      // Máscara oscura de los siameses
+      c.drawOval(Rect.fromCenter(center: cab + Offset(u * 0.1, u * 0.04), width: u * 0.38, height: u * 0.36), oscuro);
+    }
+    c.drawOval(Rect.fromCenter(center: cab + Offset(u * 0.12, u * 0.1), width: u * 0.3, height: u * 0.2),
+        skin.puntas ? oscuro : crema);
     if (muerto) {
       final x = Paint()
         ..color = negro.color
@@ -469,7 +563,8 @@ class PintorJuego extends CustomPainter {
       c.drawLine(o - Offset(u * 0.06, u * 0.06), o + Offset(u * 0.06, u * 0.06), x);
       c.drawLine(o + Offset(-u * 0.06, u * 0.06), o + Offset(u * 0.06, -u * 0.06), x);
     } else {
-      c.drawOval(Rect.fromCenter(center: cab + Offset(u * 0.12, -u * 0.05), width: u * 0.1, height: u * 0.14), negro);
+      c.drawOval(Rect.fromCenter(center: cab + Offset(u * 0.12, -u * 0.05), width: u * 0.11, height: u * 0.15), ojos);
+      c.drawOval(Rect.fromCenter(center: cab + Offset(u * 0.125, -u * 0.05), width: u * 0.04, height: u * 0.12), negro);
       c.drawCircle(cab + Offset(u * 0.135, -u * 0.08), u * 0.025, Paint()..color = Colors.white);
     }
     c.drawCircle(cab + Offset(u * 0.27, u * 0.06), u * 0.04, Paint()..color = const Color(0xFFE0607E));
@@ -478,6 +573,31 @@ class PintorJuego extends CustomPainter {
       ..strokeWidth = u * 0.02;
     c.drawLine(cab + Offset(u * 0.22, u * 0.12), cab + Offset(u * 0.42, u * 0.08), bigote);
     c.drawLine(cab + Offset(u * 0.22, u * 0.14), cab + Offset(u * 0.42, u * 0.18), bigote);
+    if (motor.enAgua) {
+      // A Paco no le gusta mojarse: casco de buzo
+      c.drawCircle(cab + Offset(u * 0.03, -u * 0.04), u * 0.42,
+          Paint()..color = const Color(0x55BFEFFF));
+      c.drawCircle(
+          cab + Offset(u * 0.03, -u * 0.04),
+          u * 0.42,
+          Paint()
+            ..color = const Color(0xFFD9A93A)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = u * 0.06);
+      c.drawArc(Rect.fromCircle(center: cab + Offset(u * 0.03, -u * 0.04), radius: u * 0.32),
+          -2.4, 0.9, false,
+          Paint()
+            ..color = Colors.white70
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = u * 0.04
+            ..strokeCap = StrokeCap.round);
+      final burbuja = Paint()
+        ..color = Colors.white60
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = u * 0.025;
+      final fase = (motor.t * 1.5) % 1.0;
+      c.drawCircle(cab + Offset(u * 0.35, -u * 0.5 - fase * u * 0.8), u * 0.07, burbuja);
+    }
     c.restore();
   }
 
@@ -528,6 +648,46 @@ class PintorJuego extends CustomPainter {
         _perro(c, s, const Color(0xFFA0703F), paso: e.t * 10);
       case TipoEnemigo.saltarin:
         _perro(c, s, const Color(0xFF6E5A8A), paso: e.t * 12);
+      case TipoEnemigo.hielo:
+        _perro(c, s, const Color(0xFF8FD0F0), paso: e.t * 8);
+        c.drawPath(
+            Path()
+              ..moveTo(s * 0.22, -s * 0.85)
+              ..lineTo(s * 0.3, -s * 1.12)
+              ..lineTo(s * 0.38, -s * 0.85)
+              ..close(),
+            Paint()..color = const Color(0xFFE8FAFF));
+      case TipoEnemigo.llamas:
+        _perro(c, s, const Color(0xFFD94A2A), paso: e.t * 8);
+        final alto = s * (0.25 + sin(e.t * 14) * 0.05);
+        c.drawPath(
+            Path()
+              ..moveTo(s * 0.2, -s * 0.84)
+              ..lineTo(s * 0.3, -s * 0.84 - alto)
+              ..lineTo(s * 0.42, -s * 0.84)
+              ..close(),
+            Paint()..color = const Color(0xFFFFB020));
+      case TipoEnemigo.acido:
+        c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(-s * 0.4, -s * 0.95, s * 0.3, s * 0.4), Radius.circular(s * 0.08)),
+            Paint()..color = const Color(0xFF8BE03A));
+        _perro(c, s, const Color(0xFF6A7A5A), paso: e.t * 8);
+        c.drawCircle(Offset(s * 0.58, -s * 0.56), s * 0.06, Paint()..color = const Color(0xFF8BE03A));
+      case TipoEnemigo.espinoso:
+        final infla = e.inflar > 0 ? 1 + e.inflar * 0.6 : 1.0;
+        c.scale(infla, infla);
+        final destello = e.inflar > 0 && (e.inflar * 12).floor().isEven;
+        final espina = Paint()..color = const Color(0xFF4A3A6A);
+        for (var k = 0; k < 5; k++) {
+          final x = -s * 0.4 + k * s * 0.17;
+          c.drawPath(
+              Path()
+                ..moveTo(x - s * 0.07, -s * 0.6)
+                ..lineTo(x, -s * 0.82)
+                ..lineTo(x + s * 0.07, -s * 0.6)
+                ..close(),
+              espina);
+        }
+        _perro(c, s, destello ? const Color(0xFFFF6B6B) : const Color(0xFF8A6AB0), paso: e.t * 8);
       case TipoEnemigo.volador:
         _perro(c, s * 0.9, const Color(0xFFD9C27A), paso: 0);
         final ala = Paint()..color = Colors.white.withValues(alpha: 0.9);
@@ -564,38 +724,458 @@ class PintorJuego extends CustomPainter {
     c.translate((j.x + j.w / 2) * s, (j.y + j.h) * s);
     if (j.derrotado > 0) {
       c.rotate(pi);
-      c.translate(0, s * 1.6);
+      c.translate(0, s * 1.6 * j.datos.tamano);
+    }
+    if (j.modo == ModoJefe.preparando) {
+      c.translate(sin(motor.t * 60) * s * 0.06, 0); // tiembla antes de embestir
     }
     c.scale(j.dir.toDouble(), 1);
-    final u = s * 2;
-    _perro(c, u, j.datos.color, paso: motor.t * 8);
-    if (j.datos.corona) {
-      final corona = Path()
-        ..moveTo(u * 0.12, -u * 0.84)
-        ..lineTo(u * 0.16, -u * 1.05)
-        ..lineTo(u * 0.25, -u * 0.92)
-        ..lineTo(u * 0.32, -u * 1.08)
-        ..lineTo(u * 0.39, -u * 0.92)
-        ..lineTo(u * 0.48, -u * 1.05)
-        ..lineTo(u * 0.52, -u * 0.84)
+    final u = s * 2 * j.datos.tamano;
+    final d = j.datos;
+    final vuela = d.sabe(Habilidad.volar);
+    if (d.sabe(Habilidad.jetpack)) _jetpack(c, u);
+    if (d.disfraz == Disfraz.supremo) {
+      // Capa roja detrás
+      final capa = Path()
+        ..moveTo(u * 0.1, -u * 0.62)
+        ..quadraticBezierTo(-u * 0.5, -u * 0.7, -u * 0.75 + sin(motor.t * 5) * u * 0.05, -u * 0.12)
+        ..lineTo(-u * 0.2, -u * 0.22)
         ..close();
-      c.drawPath(corona, Paint()..color = const Color(0xFFF2C94C));
-      c.drawCircle(Offset(u * 0.32, -u * 0.9), u * 0.025, Paint()..color = const Color(0xFFE0304A));
+      c.drawPath(capa, Paint()..color = const Color(0xFFC0182A));
     }
-    // Ojo rojo
+    if (d.disfraz == Disfraz.fuego) {
+      for (var k = 0; k < 4; k++) {
+        final alto = u * (0.22 + sin(motor.t * 12 + k) * 0.06);
+        final x = -u * 0.35 + k * u * 0.17;
+        final llama = Path()
+          ..moveTo(x - u * 0.08, -u * 0.6)
+          ..lineTo(x, -u * 0.6 - alto)
+          ..lineTo(x + u * 0.08, -u * 0.6)
+          ..close();
+        c.drawPath(llama, Paint()..color = k.isEven ? const Color(0xFFFFB020) : const Color(0xFFFF5A1F));
+      }
+    }
+    if (d.disfraz == Disfraz.yeti) {
+      final pelo = Paint()..color = const Color(0xFFF7FBFF);
+      for (var k = 0; k < 6; k++) {
+        c.drawCircle(Offset(-u * 0.4 + k * u * 0.14, -u * 0.62), u * 0.1, pelo);
+      }
+    }
+    _perro(c, u, d.color, paso: vuela ? 0 : motor.t * 8);
+    _disfraz(c, u, d.disfraz);
+    // Ojo enfadado
     c.drawCircle(Offset(u * 0.4, -u * 0.68), u * 0.03, Paint()..color = const Color(0xFFFF3A3A));
+    if (j.modo == ModoJefe.mareado) {
+      for (var k = 0; k < 3; k++) {
+        final a = motor.t * 5 + k * 2.1;
+        _estrella(c, Offset(u * 0.32 + cos(a) * u * 0.25, -u * 1.0 + sin(a) * u * 0.07), u * 0.06,
+            Paint()..color = const Color(0xFFFFD23F));
+      }
+    }
+    if (vuela && motor.enAgua) {
+      final b = Paint()
+        ..color = Colors.white60
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = u * 0.015;
+      for (var k = 0; k < 3; k++) {
+        final f = (motor.t * 0.8 + k / 3) % 1.0;
+        c.drawCircle(Offset(-u * 0.5, -u * 0.4 - f * u * 0.8), u * (0.03 + k * 0.01), b);
+      }
+    }
     c.restore();
   }
 
-  void _hueso(Canvas c, double s, Hueso h) {
+  void _jetpack(Canvas c, double u) {
+    final metal = Paint()..color = const Color(0xFF8C96A8);
+    final oscuro = Paint()..color = const Color(0xFF5A6478);
+    c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(-u * 0.6, -u * 0.85, u * 0.22, u * 0.42), Radius.circular(u * 0.06)), metal);
+    c.drawRect(Rect.fromLTWH(-u * 0.57, -u * 0.45, u * 0.16, u * 0.05), oscuro);
+    final largo = u * (0.2 + sin(motor.t * 30) * 0.05);
+    final llama = Path()
+      ..moveTo(-u * 0.57, -u * 0.4)
+      ..lineTo(-u * 0.49, -u * 0.4 + largo)
+      ..lineTo(-u * 0.41, -u * 0.4)
+      ..close();
+    c.drawPath(llama, Paint()..color = const Color(0xFFFF8A1F));
+    c.drawPath(
+        Path()
+          ..moveTo(-u * 0.54, -u * 0.4)
+          ..lineTo(-u * 0.49, -u * 0.4 + largo * 0.6)
+          ..lineTo(-u * 0.44, -u * 0.4)
+          ..close(),
+        Paint()..color = const Color(0xFFFFE066));
+  }
+
+  void _pistola(Canvas c, double u, Color color) {
+    c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(u * 0.3, -u * 0.42, u * 0.42, u * 0.11), Radius.circular(u * 0.03)),
+        Paint()..color = const Color(0xFFDDE3EA));
+    c.drawRect(Rect.fromLTWH(u * 0.36, -u * 0.33, u * 0.08, u * 0.12), Paint()..color = const Color(0xFF5A6478));
+    c.drawCircle(Offset(u * 0.73, -u * 0.365), u * 0.04, Paint()..color = color);
+  }
+
+  void _disfraz(Canvas c, double u, Disfraz d) {
+    final cab = Offset(u * 0.32, -u * 0.62);
+    final oro = Paint()..color = const Color(0xFFF2C94C);
+    final negro = Paint()..color = const Color(0xFF1F1A22);
+    final blanco = Paint()..color = const Color(0xFFF4F0E4);
+    final linea = Paint()
+      ..color = const Color(0xFFCFC6B0)
+      ..strokeWidth = u * 0.035
+      ..strokeCap = StrokeCap.round;
+    switch (d) {
+      case Disfraz.guardian:
+        c.drawRect(Rect.fromLTWH(u * 0.08, -u * 0.5, u * 0.12, u * 0.12), Paint()..color = const Color(0xFF3A2A20));
+        for (var k = 0; k < 3; k++) {
+          c.drawPath(
+              Path()
+                ..moveTo(u * 0.08 + k * u * 0.04, -u * 0.5)
+                ..lineTo(u * 0.1 + k * u * 0.04, -u * 0.56)
+                ..lineTo(u * 0.12 + k * u * 0.04, -u * 0.5)
+                ..close(),
+              Paint()..color = const Color(0xFFB8BCC8));
+        }
+      case Disfraz.caballero:
+        c.drawArc(Rect.fromCircle(center: cab, radius: u * 0.29), pi, pi, true, Paint()..color = const Color(0xFF9AA0B0));
+        c.drawRect(Rect.fromLTWH(cab.dx + u * 0.02, cab.dy - u * 0.08, u * 0.25, u * 0.04), negro);
+        c.drawLine(cab + Offset(0, -u * 0.29), cab + Offset(-u * 0.1, -u * 0.45),
+            Paint()
+              ..color = const Color(0xFFE0304A)
+              ..strokeWidth = u * 0.06
+              ..strokeCap = StrokeCap.round);
+        c.drawOval(Rect.fromCenter(center: Offset(u * 0.18, -u * 0.38), width: u * 0.2, height: u * 0.3), Paint()..color = const Color(0xFF3F6BD0));
+        c.drawLine(Offset(u * 0.18, -u * 0.5), Offset(u * 0.18, -u * 0.26), oro..strokeWidth = u * 0.03);
+      case Disfraz.momia:
+        for (var k = 0; k < 4; k++) {
+          c.drawLine(Offset(-u * 0.42 + k * u * 0.2, -u * 0.6), Offset(-u * 0.32 + k * u * 0.2, -u * 0.25), linea);
+        }
+        c.drawLine(cab + Offset(-u * 0.2, -u * 0.12), cab + Offset(u * 0.22, -u * 0.18), linea);
+        c.drawLine(cab + Offset(-u * 0.2, u * 0.06), cab + Offset(u * 0.2, u * 0.02), linea);
+      case Disfraz.faraon:
+        final nemes = Path()
+          ..moveTo(cab.dx - u * 0.28, cab.dy - u * 0.05)
+          ..lineTo(cab.dx - u * 0.38, cab.dy + u * 0.3)
+          ..lineTo(cab.dx - u * 0.1, cab.dy + u * 0.3)
+          ..lineTo(cab.dx - u * 0.05, cab.dy - u * 0.05)
+          ..close();
+        c.drawPath(nemes, oro);
+        c.drawArc(Rect.fromCircle(center: cab, radius: u * 0.28), pi, pi, true, oro);
+        final azul = Paint()
+          ..color = const Color(0xFF2A55B8)
+          ..strokeWidth = u * 0.03;
+        for (var k = 0; k < 3; k++) {
+          c.drawLine(cab + Offset(-u * 0.26, -u * 0.14 + k * u * 0.1), cab + Offset(u * 0.2, -u * 0.2 + k * u * 0.06), azul);
+        }
+        c.drawCircle(cab + Offset(u * 0.05, -u * 0.3), u * 0.05, Paint()..color = const Color(0xFF3FAF5A));
+      case Disfraz.pirata:
+        final sombrero = Path()
+          ..moveTo(cab.dx - u * 0.35, cab.dy - u * 0.18)
+          ..quadraticBezierTo(cab.dx, cab.dy - u * 0.55, cab.dx + u * 0.35, cab.dy - u * 0.18)
+          ..close();
+        c.drawPath(sombrero, negro);
+        _calavera(c, cab + Offset(0, -u * 0.3), u * 0.05);
+        c.drawCircle(Offset(u * 0.4, -u * 0.68), u * 0.06, negro);
+        c.drawLine(cab + Offset(-u * 0.1, -u * 0.18), cab + Offset(u * 0.2, u * 0.0), negro..strokeWidth = u * 0.02);
+      case Disfraz.buzo:
+        c.drawCircle(cab, u * 0.36, Paint()..color = const Color(0x6699DDFF));
+        c.drawCircle(
+            cab,
+            u * 0.36,
+            Paint()
+              ..color = const Color(0xFFD9A93A)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = u * 0.06);
+        c.drawCircle(cab + Offset(u * 0.36, 0), u * 0.07, Paint()..color = const Color(0xFFD9A93A));
+      case Disfraz.nube:
+        c.drawRect(Rect.fromLTWH(cab.dx - u * 0.05, cab.dy - u * 0.14, u * 0.3, u * 0.05), negro);
+        c.drawCircle(cab + Offset(u * 0.08, -u * 0.07), u * 0.07, Paint()..color = const Color(0xFF9FD8FF));
+        for (var k = 0; k < 3; k++) {
+          c.drawCircle(Offset(-u * 0.3 + k * u * 0.25, -u * 0.18), u * 0.12, Paint()..color = Colors.white);
+        }
+      case Disfraz.trueno:
+        final rayo = Path()
+          ..moveTo(cab.dx, cab.dy - u * 0.2)
+          ..lineTo(cab.dx - u * 0.08, cab.dy - u * 0.42)
+          ..lineTo(cab.dx + u * 0.02, cab.dy - u * 0.38)
+          ..lineTo(cab.dx - u * 0.03, cab.dy - u * 0.58)
+          ..lineTo(cab.dx + u * 0.12, cab.dy - u * 0.32)
+          ..lineTo(cab.dx + u * 0.03, cab.dy - u * 0.35)
+          ..close();
+        c.drawPath(rayo, Paint()..color = const Color(0xFFFFE04A));
+        c.drawRect(Rect.fromLTWH(cab.dx - u * 0.05, cab.dy - u * 0.14, u * 0.3, u * 0.05), negro);
+      case Disfraz.esquimal:
+        c.drawCircle(cab, u * 0.33, Paint()..color = const Color(0xFF8A5A3A));
+        c.drawCircle(
+            cab,
+            u * 0.31,
+            Paint()
+              ..color = Colors.white
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = u * 0.07);
+        c.drawCircle(cab, u * 0.2, Paint()..color = const Color(0xFFF2F2F2));
+        c.drawCircle(cab + Offset(u * 0.08, -u * 0.04), u * 0.03, negro);
+        c.drawCircle(cab + Offset(u * 0.2, u * 0.06), u * 0.04, negro);
+        c.drawRect(Rect.fromLTWH(-u * 0.45, -u * 0.62, u * 0.8, u * 0.12), Paint()..color = const Color(0xFF8A5A3A));
+      case Disfraz.yeti:
+        c.drawPath(
+            Path()
+              ..moveTo(cab.dx - u * 0.15, cab.dy - u * 0.2)
+              ..lineTo(cab.dx - u * 0.1, cab.dy - u * 0.42)
+              ..lineTo(cab.dx, cab.dy - u * 0.24)
+              ..close(),
+            Paint()..color = const Color(0xFFBFD8EA));
+      case Disfraz.robot:
+      case Disfraz.megaRobot:
+        final metal = Paint()..color = const Color(0xFFB8C0CE);
+        c.drawRect(Rect.fromLTWH(-u * 0.3, -u * 0.58, u * 0.4, u * 0.3), metal);
+        for (var k = 0; k < 3; k++) {
+          c.drawCircle(Offset(-u * 0.22 + k * u * 0.12, -u * 0.43), u * 0.03,
+              Paint()..color = k == ((motor.t * 3).floor() % 3) ? const Color(0xFF34E0E0) : const Color(0xFF5A6478));
+        }
+        c.drawLine(cab + Offset(0, -u * 0.24), cab + Offset(0, -u * 0.42),
+            Paint()
+              ..color = const Color(0xFF5A6478)
+              ..strokeWidth = u * 0.03);
+        c.drawCircle(cab + Offset(0, -u * 0.44), u * 0.05, Paint()..color = const Color(0xFFFF3A3A));
+        if (d == Disfraz.megaRobot) {
+          c.drawRect(Rect.fromLTWH(cab.dx - u * 0.02, cab.dy - u * 0.1, u * 0.3, u * 0.07), Paint()..color = const Color(0xFFFF3A3A));
+        }
+        _pistola(c, u, d == Disfraz.megaRobot ? const Color(0xFFFF3A3A) : const Color(0xFF34E0E0));
+      case Disfraz.fuego:
+        c.drawCircle(cab + Offset(u * 0.08, -u * 0.06), u * 0.05, Paint()..color = const Color(0xFFFFE066));
+      case Disfraz.volcan:
+        final roca = Paint()..color = const Color(0xFF3A2A26);
+        final grieta = Paint()
+          ..color = const Color(0xFFFF7A1A)
+          ..strokeWidth = u * 0.03;
+        for (var k = 0; k < 3; k++) {
+          c.drawPath(
+              Path()
+                ..moveTo(-u * 0.42 + k * u * 0.25, -u * 0.6)
+                ..lineTo(-u * 0.32 + k * u * 0.25, -u * 0.82)
+                ..lineTo(-u * 0.22 + k * u * 0.25, -u * 0.6)
+                ..close(),
+              roca);
+        }
+        c.drawLine(Offset(-u * 0.3, -u * 0.5), Offset(-u * 0.1, -u * 0.35), grieta);
+        c.drawLine(Offset(0, -u * 0.55), Offset(u * 0.1, -u * 0.32), grieta);
+      case Disfraz.toxico:
+        c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cab.dx + u * 0.05, cab.dy - u * 0.02, u * 0.28, u * 0.22), Radius.circular(u * 0.06)),
+            Paint()..color = const Color(0xFF4A5A4A));
+        c.drawCircle(cab + Offset(u * 0.3, u * 0.12), u * 0.06, Paint()..color = const Color(0xFF9AE04A));
+        for (var k = 0; k < 3; k++) {
+          final f = (motor.t * 0.7 + k / 3) % 1.0;
+          c.drawCircle(Offset(-u * 0.2 + k * u * 0.2, -u * 0.7 - f * u * 0.5), u * 0.05 * (1 - f),
+              Paint()..color = const Color(0xAA9AE04A));
+        }
+      case Disfraz.mutante:
+        c.drawCircle(cab + Offset(-u * 0.02, -u * 0.18), u * 0.06, Paint()..color = Colors.white);
+        c.drawCircle(cab + Offset(-u * 0.01, -u * 0.18), u * 0.03, negro);
+        for (var k = 0; k < 4; k++) {
+          c.drawCircle(Offset(-u * 0.35 + k * u * 0.18, -u * 0.48 + (k % 2) * u * 0.08), u * 0.04,
+              Paint()..color = const Color(0xFF2F7A2A));
+        }
+      case Disfraz.maestro:
+        c.drawRect(Rect.fromLTWH(cab.dx - u * 0.27, cab.dy - u * 0.16, u * 0.54, u * 0.07), Paint()..color = const Color(0xFFE0304A));
+        c.drawLine(cab + Offset(-u * 0.27, -u * 0.12), cab + Offset(-u * 0.5, -u * 0.05 + sin(motor.t * 8) * u * 0.03),
+            Paint()
+              ..color = const Color(0xFFE0304A)
+              ..strokeWidth = u * 0.04);
+        c.drawRect(Rect.fromLTWH(-u * 0.45, -u * 0.42, u * 0.8, u * 0.06), negro);
+      case Disfraz.granMaestro:
+        final gorro = Path()
+          ..moveTo(cab.dx - u * 0.3, cab.dy - u * 0.15)
+          ..lineTo(cab.dx - u * 0.05 + sin(motor.t * 2) * u * 0.03, cab.dy - u * 0.75)
+          ..lineTo(cab.dx + u * 0.28, cab.dy - u * 0.15)
+          ..close();
+        c.drawPath(gorro, Paint()..color = const Color(0xFF3A2A8A));
+        _estrella(c, cab + Offset(-u * 0.02, -u * 0.38), u * 0.06, oro);
+        final barba = Path()
+          ..moveTo(cab.dx + u * 0.1, cab.dy + u * 0.12)
+          ..lineTo(cab.dx + u * 0.3, cab.dy + u * 0.15)
+          ..lineTo(cab.dx + u * 0.18, cab.dy + u * 0.48)
+          ..close();
+        c.drawPath(barba, blanco);
+      case Disfraz.gigante:
+        // Peto de trabajo con botones
+        c.drawRect(Rect.fromLTWH(-u * 0.3, -u * 0.6, u * 0.5, u * 0.36), Paint()..color = const Color(0xFF3F6BD0));
+        c.drawCircle(Offset(-u * 0.22, -u * 0.55), u * 0.03, oro);
+        c.drawCircle(Offset(u * 0.12, -u * 0.55), u * 0.03, oro);
+      case Disfraz.titan:
+        final cuerno = Paint()..color = const Color(0xFFF4F0E4);
+        c.drawArc(Rect.fromCircle(center: cab, radius: u * 0.29), pi, pi, true, Paint()..color = const Color(0xFF6E7380));
+        c.drawPath(
+            Path()
+              ..moveTo(cab.dx - u * 0.2, cab.dy - u * 0.2)
+              ..quadraticBezierTo(cab.dx - u * 0.45, cab.dy - u * 0.35, cab.dx - u * 0.35, cab.dy - u * 0.6)
+              ..lineTo(cab.dx - u * 0.12, cab.dy - u * 0.25)
+              ..close(),
+            cuerno);
+        c.drawPath(
+            Path()
+              ..moveTo(cab.dx + u * 0.12, cab.dy - u * 0.25)
+              ..quadraticBezierTo(cab.dx + u * 0.4, cab.dy - u * 0.4, cab.dx + u * 0.32, cab.dy - u * 0.62)
+              ..lineTo(cab.dx + u * 0.22, cab.dy - u * 0.18)
+              ..close(),
+            cuerno);
+      case Disfraz.supremo:
+        final corona = Path()
+          ..moveTo(u * 0.12, -u * 0.84)
+          ..lineTo(u * 0.16, -u * 1.05)
+          ..lineTo(u * 0.25, -u * 0.92)
+          ..lineTo(u * 0.32, -u * 1.08)
+          ..lineTo(u * 0.39, -u * 0.92)
+          ..lineTo(u * 0.48, -u * 1.05)
+          ..lineTo(u * 0.52, -u * 0.84)
+          ..close();
+        c.drawPath(corona, oro);
+        c.drawCircle(Offset(u * 0.32, -u * 0.9), u * 0.025, Paint()..color = const Color(0xFFE0304A));
+    }
+  }
+
+  void _calavera(Canvas c, Offset o, double r) {
+    c.drawCircle(o, r, Paint()..color = Colors.white);
+    c.drawCircle(o + Offset(-r * 0.35, -r * 0.1), r * 0.25, Paint()..color = Colors.black);
+    c.drawCircle(o + Offset(r * 0.35, -r * 0.1), r * 0.25, Paint()..color = Colors.black);
+  }
+
+  void _estrella(Canvas c, Offset o, double r, Paint p) {
+    final path = Path();
+    for (var k = 0; k < 10; k++) {
+      final a = -pi / 2 + k * pi / 5;
+      final rr = k.isEven ? r : r * 0.45;
+      final pt = o + Offset(cos(a) * rr, sin(a) * rr);
+      if (k == 0) {
+        path.moveTo(pt.dx, pt.dy);
+      } else {
+        path.lineTo(pt.dx, pt.dy);
+      }
+    }
+    path.close();
+    c.drawPath(path, p);
+  }
+
+  void _proyectil(Canvas c, double s, Proyectil p) {
+    if (p.espera > 0) {
+      // Aviso: el suelo brilla donde va a salir el fuego
+      final brillo = 0.4 + 0.4 * sin(motor.t * 25).abs();
+      c.drawOval(
+          Rect.fromCenter(center: Offset(p.centroX * s, p.abajo * s), width: s * 1.1, height: s * 0.35),
+          Paint()..color = const Color(0xFFFF7A1A).withValues(alpha: brillo));
+      return;
+    }
     c.save();
-    c.translate((h.x + h.w / 2) * s, (h.y + h.h / 2) * s);
-    c.rotate(h.giro);
-    final p = Paint()..color = const Color(0xFFF5F0E0);
-    c.drawRect(Rect.fromCenter(center: Offset.zero, width: s * 0.5, height: s * 0.12), p);
-    for (final dx in [-0.25, 0.25]) {
-      c.drawCircle(Offset(s * dx, -s * 0.07), s * 0.09, p);
-      c.drawCircle(Offset(s * dx, s * 0.07), s * 0.09, p);
+    c.translate(p.centroX * s, (p.y + p.h / 2) * s);
+    final angulo = atan2(p.vy, p.vx == 0 ? 0.0001 : p.vx);
+    final r = s * max(p.w, p.h) / 2;
+    switch (p.tipo) {
+      case TipoProyectil.hueso:
+        c.rotate(p.giro);
+        final b = Paint()..color = const Color(0xFFF5F0E0);
+        c.drawRect(Rect.fromCenter(center: Offset.zero, width: s * 0.5, height: s * 0.12), b);
+        for (final dx in [-0.25, 0.25]) {
+          c.drawCircle(Offset(s * dx, -s * 0.07), s * 0.09, b);
+          c.drawCircle(Offset(s * dx, s * 0.07), s * 0.09, b);
+        }
+      case TipoProyectil.espina:
+      case TipoProyectil.espinaNieve:
+        c.rotate(angulo);
+        final color = p.tipo == TipoProyectil.espina ? const Color(0xFF6B8E3A) : const Color(0xFFBFEFFF);
+        c.drawPath(
+            Path()
+              ..moveTo(r * 1.1, 0)
+              ..lineTo(-r * 0.8, -r * 0.3)
+              ..lineTo(-r * 0.8, r * 0.3)
+              ..close(),
+            Paint()..color = color);
+        if (p.tipo == TipoProyectil.espina) {
+          c.drawLine(Offset(-r * 0.6, 0), Offset(r * 0.6, 0),
+              Paint()
+                ..color = const Color(0xFFE8F0C0)
+                ..strokeWidth = s * 0.03);
+        }
+      case TipoProyectil.vendas:
+      case TipoProyectil.bala:
+        c.drawCircle(Offset.zero, r * 0.8, Paint()..color = const Color(0xFF2A2A30));
+        c.drawCircle(Offset(-r * 0.25, -r * 0.25), r * 0.2, Paint()..color = Colors.white38);
+      case TipoProyectil.burbuja:
+        c.drawCircle(
+            Offset.zero,
+            r,
+            Paint()
+              ..color = Colors.white70
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = s * 0.05);
+      case TipoProyectil.gota:
+        final color = motor.nivel.tema.liquido ?? const Color(0xFF4FA8F0);
+        c.drawPath(
+            Path()
+              ..moveTo(0, -r)
+              ..quadraticBezierTo(r * 0.9, r * 0.2, 0, r)
+              ..quadraticBezierTo(-r * 0.9, r * 0.2, 0, -r),
+            Paint()..color = color);
+      case TipoProyectil.rayo:
+        c.drawPath(
+            Path()
+              ..moveTo(-r * 0.2, -r * 1.2)
+              ..lineTo(r * 0.5, -r * 0.1)
+              ..lineTo(0, -r * 0.1)
+              ..lineTo(r * 0.3, r * 1.2)
+              ..lineTo(-r * 0.5, 0)
+              ..lineTo(0, 0)
+              ..close(),
+            Paint()..color = const Color(0xFFFFE04A));
+      case TipoProyectil.bolaNieve:
+        c.drawCircle(Offset.zero, r * 0.8, Paint()..color = Colors.white);
+      case TipoProyectil.copo:
+        c.rotate(p.giro * 0.5);
+        final hielo = Paint()
+          ..color = Colors.white
+          ..strokeWidth = s * 0.06
+          ..strokeCap = StrokeCap.round;
+        for (var k = 0; k < 4; k++) {
+          final a = k * pi / 4;
+          c.drawLine(Offset(cos(a) * r * 1.2, sin(a) * r * 1.2), Offset(-cos(a) * r * 1.2, -sin(a) * r * 1.2), hielo);
+        }
+      case TipoProyectil.laser:
+        final color = motor.jefe?.datos.disfraz == Disfraz.megaRobot ? const Color(0xFFFF3A3A) : const Color(0xFF34E0E0);
+        c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: s * p.w * 1.2, height: s * p.h * 1.6), Radius.circular(s * 0.2)),
+            Paint()..color = color.withValues(alpha: 0.35));
+        c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: s * p.w, height: s * p.h * 0.6), Radius.circular(s * 0.1)),
+            Paint()..color = Colors.white);
+      case TipoProyectil.fuego:
+        c.drawCircle(Offset.zero, r * 1.2, Paint()..color = const Color(0x55FF7A1A));
+        c.drawCircle(Offset.zero, r * 0.9, Paint()..color = const Color(0xFFFF6A1A));
+        c.drawCircle(Offset(0, -r * 0.1), r * 0.5, Paint()..color = const Color(0xFFFFD23F));
+      case TipoProyectil.roca:
+        c.rotate(p.giro * 0.3);
+        c.drawPath(
+            Path()
+              ..moveTo(-r, -r * 0.3)
+              ..lineTo(-r * 0.3, -r)
+              ..lineTo(r * 0.8, -r * 0.6)
+              ..lineTo(r, r * 0.4)
+              ..lineTo(0, r)
+              ..lineTo(-r * 0.8, r * 0.6)
+              ..close(),
+            Paint()..color = const Color(0xFF5A4A44));
+      case TipoProyectil.veneno:
+        final crece = 1 + (1.1 - p.dividir.clamp(0, 1.1)) * 0.3;
+        c.drawCircle(Offset.zero, r * crece, Paint()..color = const Color(0xCC8BE03A));
+        c.drawCircle(Offset(-r * 0.3, -r * 0.3), r * 0.25, Paint()..color = Colors.white70);
+      case TipoProyectil.acido:
+        c.drawCircle(Offset.zero, r * 1.3, Paint()..color = const Color(0x558BE03A));
+        c.drawCircle(Offset.zero, r * 0.9, Paint()..color = const Color(0xFF6BD020));
+        c.drawCircle(Offset(-r * 0.3, -r * 0.3), r * 0.25, Paint()..color = Colors.white70);
+      case TipoProyectil.estrella:
+        c.rotate(p.giro);
+        _estrella(c, Offset.zero, r * 1.1, Paint()..color = const Color(0xFFFFD23F));
+      case TipoProyectil.pescado:
+        c.scale(p.vx >= 0 ? -1 : 1, 1);
+        _pescado(c, Offset.zero, r * 0.9, Paint()..color = const Color(0xFF7FB3D9), Paint()..color = const Color(0xFF4A86B8));
+      case TipoProyectil.onda:
+        final color = Color.lerp(motor.nivel.tema.cesped, Colors.white, 0.4)!;
+        c.drawArc(Rect.fromCenter(center: Offset(0, s * 0.3), width: s * 0.9, height: s * 1.2), pi, pi, true,
+            Paint()..color = color.withValues(alpha: 0.85));
     }
     c.restore();
   }

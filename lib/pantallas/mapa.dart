@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../datos/mundos.dart';
 import '../progreso.dart';
 import 'juego.dart';
+import 'tienda.dart';
 
 class PantallaMapa extends StatefulWidget {
   const PantallaMapa({super.key});
@@ -55,9 +56,19 @@ class _PantallaMapaState extends State<PantallaMapa> {
                   const Icon(Icons.set_meal_rounded, color: Color(0xFFFFC93C)),
                   const SizedBox(width: 6),
                   Text(
-                    '${Progreso.pescados.values.fold<int>(0, (a, b) => a + b)}',
+                    '${Progreso.monedero}',
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => const PantallaTienda()));
+                      if (mounted) setState(() {});
+                    },
+                    icon: const Icon(Icons.storefront_rounded),
+                    label: const Text('Tienda'),
                   ),
                 ],
               ),
@@ -67,11 +78,12 @@ class _PantallaMapaState extends State<PantallaMapa> {
                 controller: _scroll,
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                itemCount: mundos.length,
-                itemBuilder: (_, i) => _TarjetaMundo(
-                  mundo: mundos[i],
-                  alJugar: _jugar,
-                ),
+                itemCount: mundos.length + 1,
+                itemBuilder: (_, i) => i < mundos.length
+                    ? _TarjetaMundo(mundo: mundos[i], alJugar: _jugar)
+                    : Progreso.secreto
+                        ? _TarjetaMundo(mundo: mundoSecreto, alJugar: _jugar)
+                        : const _TarjetaOculta(),
               ),
             ),
           ],
@@ -89,7 +101,7 @@ class _TarjetaMundo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final niveles = mundo.niveles;
-    final bloqueado = niveles.first.indice > Progreso.desbloqueado;
+    final bloqueado = !Progreso.abierto(niveles.first.indice);
     return Container(
       width: 280,
       margin: const EdgeInsets.only(right: 12),
@@ -151,6 +163,32 @@ class _TarjetaMundo extends StatelessWidget {
   }
 }
 
+/// Hueco del mundo secreto mientras no se ha encontrado.
+class _TarjetaOculta extends StatelessWidget {
+  const _TarjetaOculta();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 200,
+      margin: const EdgeInsets.only(right: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A2434),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white24, width: 3),
+      ),
+      alignment: Alignment.center,
+      child: const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('?', style: TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: Colors.white38)),
+          Text('Mundo secreto', style: TextStyle(color: Colors.white54, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
 class _BotonNivel extends StatelessWidget {
   final Nivel nivel;
   final void Function(Nivel) alJugar;
@@ -158,7 +196,7 @@ class _BotonNivel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final abierto = nivel.indice <= Progreso.desbloqueado;
+    final abierto = Progreso.abierto(nivel.indice);
     final hecho = Progreso.completado(nivel.indice);
     final color = abierto ? nivel.tema.cesped : const Color(0xFF3A4658);
     final fondo = abierto ? nivel.tema.cieloArriba : const Color(0xFF2A3546);

@@ -3,11 +3,43 @@ import 'dart:math';
 import '../datos/mundos.dart';
 
 /// Casillas del mapa.
-enum Casilla { vacio, tierra, ladrillo, liquido, pinchos, moneda, corazon }
+enum Casilla {
+  vacio,
+  tierra,
+  ladrillo,
+  liquido,
+  pinchos,
+  moneda,
+  corazon,
+
+  /// Parece tierra pero se puede atravesar (camino secreto).
+  falso,
+
+  /// Puerta al mundo secreto.
+  portal,
+}
 
 bool esSolida(Casilla c) => c == Casilla.tierra || c == Casilla.ladrillo;
 
-enum TipoEnemigo { perro, saltarin, volador, pez, fuego }
+enum TipoEnemigo {
+  perro,
+  saltarin,
+  volador,
+  pez,
+  fuego,
+
+  /// Perro que lanza hielo.
+  hielo,
+
+  /// Perro que lanza llamas.
+  llamas,
+
+  /// Perro que dispara bolas de ácido (quitan toda la vida).
+  acido,
+
+  /// Perro de espinas: se infla y explota cuando Paco se acerca.
+  espinoso,
+}
 
 class Aparicion {
   final TipoEnemigo tipo;
@@ -68,7 +100,8 @@ Mapa generarMapa(Nivel nivel) {
   final g = _Generador(nivel);
   switch (nivel.tipo) {
     case TipoNivel.suelo:
-      return g.suelo();
+      final m = g.suelo();
+      return nivel.caminoSecreto ? _conCaminoSecreto(m) : m;
     case TipoNivel.cielo:
       return g.cielo();
     case TipoNivel.fortaleza:
@@ -76,6 +109,41 @@ Mapa generarMapa(Nivel nivel) {
     case TipoNivel.agua:
       return g.agua();
   }
+}
+
+/// Ancho de la zona secreta escondida a la izquierda del inicio.
+const anchoSecreto = 16;
+
+/// Añade a la izquierda del inicio una pared falsa con el portal al mundo secreto.
+Mapa _conCaminoSecreto(Mapa original) {
+  const extra = anchoSecreto;
+  final m = Mapa(original.ancho + extra);
+  for (var x = 0; x < original.ancho; x++) {
+    for (var y = 0; y < Mapa.alto; y++) {
+      m.casillas[x + extra][y] = original.casillas[x][y];
+    }
+  }
+  final suelo = original.superficie(0);
+  for (var x = 0; x < extra; x++) {
+    m.columna(x, suelo);
+    for (var y = 0; y < suelo; y++) {
+      m.poner(x, y, Casilla.falso);
+    }
+  }
+  // Pasillo con pescados y el portal al fondo
+  for (var x = 3; x < extra - 1; x += 2) {
+    m.poner(x, suelo - 1, Casilla.moneda);
+  }
+  m.poner(1, suelo - 1, Casilla.portal);
+  m.poner(1, suelo - 2, Casilla.portal);
+  m.inicioX = original.inicioX + extra;
+  m.inicioY = original.inicioY;
+  m.controlX = original.controlX + extra;
+  m.metaX = original.metaX + extra;
+  for (final a in original.enemigos) {
+    m.enemigos.add(Aparicion(a.tipo, a.x + extra, a.y));
+  }
+  return m;
 }
 
 class _Generador {
@@ -88,7 +156,7 @@ class _Generador {
       : r = Random(nivel.mundo * 1000 + nivel.numero * 37 + 7),
         d = nivel.dificultad;
 
-  int get largo => (110 + d * 9).round();
+  int get largo => (160 + d * 12).round();
 
   /// Hueco más ancho que se puede saltar (Paco salta unas 5 casillas).
   int get huecoMax => min(4, 2 + (d / 3).floor());
@@ -99,6 +167,16 @@ class _Generador {
   double get probEnemigo => min(0.75, 0.25 + d * 0.05);
 
   TipoEnemigo enemigoDeSuelo() {
+    final w = nivel.mundo;
+    final especiales = [
+      if (w >= 2 && w != 3) TipoEnemigo.espinoso,
+      if (w == 5 || w >= 9) TipoEnemigo.hielo,
+      if (w == 6 || w == 7 || w >= 9) TipoEnemigo.llamas,
+      if (w == 6 || w == 8 || w >= 9) TipoEnemigo.acido,
+    ];
+    if (especiales.isNotEmpty && azar(0.4)) {
+      return especiales[r.nextInt(especiales.length)];
+    }
     if (d >= 2 && azar(0.25 + d * 0.02)) return TipoEnemigo.saltarin;
     return TipoEnemigo.perro;
   }
@@ -291,6 +369,16 @@ class _Generador {
       m.poner(i, y + 1, Casilla.tierra);
     }
     m.metaX = m.ancho - 6.0;
+    // Mar de veneno (u otro líquido) debajo de las plataformas
+    if (nivel.tema.liquido != null) {
+      for (var i = 0; i < m.ancho; i++) {
+        for (var fila = Mapa.alto - 2; fila < Mapa.alto; fila++) {
+          if (m.casillas[i][fila] == Casilla.vacio) {
+            m.poner(i, fila, Casilla.liquido);
+          }
+        }
+      }
+    }
     return m;
   }
 
@@ -300,7 +388,10 @@ class _Generador {
     const h = 12;
     final aire = nivel.tema.liquido == null; // castillo en el cielo
     var x = 0;
+    // La plataforma voladora no tiene techo
+    final sinTecho = identical(nivel.tema, Temas.plataformaVoladora);
     void techo(int col) {
+      if (sinTecho) return;
       m.poner(col, 0, Casilla.ladrillo);
       m.poner(col, 1, Casilla.ladrillo);
     }

@@ -58,6 +58,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
     if (motor.terminado && !fin) {
       fin = true;
       Progreso.completar(nivel.indice, motor.pescados);
+      if (motor.secretoEncontrado) Progreso.abrirSecreto();
       setState(() {});
     }
   }
@@ -107,8 +108,10 @@ class _PantallaJuegoState extends State<PantallaJuego>
   }
 
   Nivel? get _siguiente {
+    if (motor.secretoEncontrado) return mundoSecreto.niveles.first;
     final i = nivel.indice + 1;
-    return i < todosLosNiveles.length ? todosLosNiveles[i] : null;
+    if (nivel.indice == 79 || i >= todosLosNiveles.length) return null;
+    return todosLosNiveles[i];
   }
 
   @override
@@ -293,13 +296,15 @@ class _PantallaJuegoState extends State<PantallaJuego>
 
   Widget _ventanaFin() {
     final siguiente = _siguiente;
-    final ultimo = siguiente == null;
+    final ultimo = nivel.indice == 79;
     final jefe = motor.jefe;
-    final titulo = ultimo
-        ? '¡Paco venció al Perro Supremo!'
-        : jefe != null
-            ? '¡Venciste a ${jefe.datos.nombre}!'
-            : '¡Nivel completado!';
+    final titulo = motor.secretoEncontrado
+        ? '¡Encontraste el mundo secreto!'
+        : ultimo
+            ? '¡Paco venció al Perro Supremo!'
+            : jefe != null
+                ? '¡Venciste a ${jefe.datos.nombre}!'
+                : '¡Nivel completado!';
     return _velo(Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -330,9 +335,9 @@ class _PantallaJuegoState extends State<PantallaJuego>
           runSpacing: 12,
           alignment: WrapAlignment.center,
           children: [
-            if (!ultimo)
+            if (siguiente != null)
               BotonJuego(
-                  texto: 'Siguiente',
+                  texto: motor.secretoEncontrado ? 'Entrar' : 'Siguiente',
                   icono: Icons.arrow_forward_rounded,
                   onPressed: () => _cambiarNivel(siguiente)),
             BotonJuego(

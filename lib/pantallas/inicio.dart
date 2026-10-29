@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
 
+import '../progreso.dart';
 import 'comunes.dart';
 import 'mapa.dart';
+import 'tienda.dart';
 
-class PantallaInicio extends StatelessWidget {
+class PantallaInicio extends StatefulWidget {
   const PantallaInicio({super.key});
+
+  @override
+  State<PantallaInicio> createState() => _PantallaInicioState();
+}
+
+class _PantallaInicioState extends State<PantallaInicio> {
+  Future<void> _ir(Widget pantalla) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => pantalla));
+    if (mounted) setState(() {}); // por si cambió el traje de Paco
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,10 +36,10 @@ class PantallaInicio extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const RetratoPaco(tamano: 130),
+                  RetratoPaco(tamano: 130, skin: Progreso.skin),
                   const SizedBox(height: 10),
                   Text(
-                    'Las aventuras de Paco',
+                    'Paquito Adventure',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 40,
@@ -49,11 +61,23 @@ class PantallaInicio extends StatelessWidget {
                         fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 22),
-                  BotonJuego(
-                    texto: 'JUGAR',
-                    icono: Icons.play_arrow_rounded,
-                    onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const PantallaMapa())),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      BotonJuego(
+                        texto: 'JUGAR',
+                        icono: Icons.play_arrow_rounded,
+                        onPressed: () => _ir(const PantallaMapa()),
+                      ),
+                      BotonJuego(
+                        texto: 'TIENDA',
+                        icono: Icons.storefront_rounded,
+                        color: const Color(0xFF4A90D9),
+                        onPressed: () => _ir(const PantallaTienda()),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -17,6 +17,9 @@ enum Decorado {
   volcanes,
   burbujas,
   arbolesSecos,
+  cuadricula,
+  ciudadAbajo,
+  gigante,
 }
 
 /// Colores y adornos de un ambiente.
@@ -236,15 +239,52 @@ class Temas {
     liquido: Color(0xFFA6F23A),
     decorado: Decorado.muros,
   );
-  static const torre = Tema(
-    nombre: 'Torre de prueba',
-    cieloArriba: Color(0xFF1E1E2E),
-    cieloAbajo: Color(0xFF6B4FA0),
-    tierra: Color(0xFF5E5A7A),
-    cesped: Color(0xFFF2B33D),
-    ladrillo: Color(0xFF8C6FD0),
-    liquido: Color(0xFFFF5A1F),
-    decorado: Decorado.muros,
+  static const caja = Tema(
+    nombre: 'Caja de pruebas',
+    cieloArriba: Color(0xFFDDE3EA),
+    cieloAbajo: Color(0xFFF4F6F8),
+    tierra: Color(0xFF9AA4B0),
+    cesped: Color(0xFF2FA4FF),
+    ladrillo: Color(0xFFFF9A2F),
+    liquido: Color(0xFF6BE3FF),
+    decorado: Decorado.cuadricula,
+  );
+  static const cajaAgua = Tema(
+    nombre: 'Caja de pruebas inundada',
+    cieloArriba: Color(0xFF8FC7E8),
+    cieloAbajo: Color(0xFF4C8DB8),
+    tierra: Color(0xFF9AA4B0),
+    cesped: Color(0xFF2FA4FF),
+    ladrillo: Color(0xFFFF9A2F),
+    decorado: Decorado.cuadricula,
+  );
+  static const plataformaVoladora = Tema(
+    nombre: 'Plataforma voladora',
+    cieloArriba: Color(0xFF2B1C6E),
+    cieloAbajo: Color(0xFFFF8AC8),
+    tierra: Color(0xFF545C80),
+    cesped: Color(0xFF34E0E0),
+    ladrillo: Color(0xFF6A72A0),
+    decorado: Decorado.ciudadAbajo,
+  );
+  static const gigante = Tema(
+    nombre: 'Mundo gigante',
+    cieloArriba: Color(0xFF7FD0FF),
+    cieloAbajo: Color(0xFFE8F8FF),
+    tierra: Color(0xFF7A4E2A),
+    cesped: Color(0xFF3FB04A),
+    ladrillo: Color(0xFFE05A4A),
+    liquido: Color(0xFF4FB0E8),
+    decorado: Decorado.gigante,
+  );
+  static const charcoGigante = Tema(
+    nombre: 'Charco gigante',
+    cieloArriba: Color(0xFF4FA0D0),
+    cieloAbajo: Color(0xFF2A6A90),
+    tierra: Color(0xFF7A4E2A),
+    cesped: Color(0xFF3FB04A),
+    ladrillo: Color(0xFFE05A4A),
+    decorado: Decorado.gigante,
   );
   static const abandonado = Tema(
     nombre: 'Bosque abandonado',
@@ -267,17 +307,99 @@ class Temas {
   );
 }
 
+/// Cómo va vestido cada jefe.
+enum Disfraz {
+  guardian,
+  caballero,
+  momia,
+  faraon,
+  pirata,
+  buzo,
+  nube,
+  trueno,
+  esquimal,
+  yeti,
+  robot,
+  megaRobot,
+  fuego,
+  volcan,
+  toxico,
+  mutante,
+  maestro,
+  granMaestro,
+  supremo,
+  gigante,
+  titan,
+}
+
+/// Lo que sabe hacer un jefe.
+enum Habilidad {
+  /// Salta de vez en cuando.
+  saltar,
+
+  /// Al caer de un salto hace una onda por el suelo (hay que saltarla).
+  onda,
+
+  /// Se para, tiembla y embiste muy rápido.
+  embestir,
+
+  /// Lanza cosas en arco hacia Paco.
+  lanzarArco,
+
+  /// Dispara en línea recta a la altura de Paco.
+  disparar,
+
+  /// Hace caer cosas desde arriba sobre Paco.
+  lluvia,
+
+  /// Vuela (o nada) en vez de caminar.
+  volar,
+
+  /// Lleva un jetpack que suelta bolitas de fuego que bajan despacio.
+  jetpack,
+
+  /// Hace salir bolas de fuego del suelo debajo de Paco.
+  erupcion,
+}
+
+/// Lo que lanzan los jefes.
+enum TipoProyectil {
+  hueso,
+  espina,
+  vendas,
+  bala,
+  burbuja,
+  gota,
+  rayo,
+  bolaNieve,
+  laser,
+  fuego,
+  roca,
+  veneno,
+  estrella,
+  pescado,
+  acido,
+  copo,
+  espinaNieve,
+  onda,
+}
+
 class Jefe {
   final String nombre;
   final int vidas;
   final Color color;
+  final Disfraz disfraz;
+  final Set<Habilidad> habilidades;
+  final TipoProyectil proyectil;
 
-  /// El Perro Supremo lanza huesos.
-  final bool lanzaHuesos;
-  final bool corona;
+  /// 1 = tamaño normal de jefe; los del mundo gigante son más grandes.
+  final double tamano;
 
-  const Jefe(this.nombre, this.vidas, this.color,
-      {this.lanzaHuesos = false, this.corona = false});
+  const Jefe(this.nombre, this.vidas, this.color, this.disfraz,
+      this.habilidades,
+      {this.proyectil = TipoProyectil.hueso, this.tamano = 1});
+
+  bool sabe(Habilidad h) => habilidades.contains(h);
 }
 
 class Nivel {
@@ -290,8 +412,19 @@ class Nivel {
   /// Bolas de fuego que saltan de la lava.
   final bool fuego;
 
+  /// La pelea con el jefe es dentro del agua (Paco nada).
+  final bool arenaAcuatica;
+
+  /// Yendo hacia atrás al empezar se llega al mundo secreto.
+  final bool caminoSecreto;
+
   const Nivel(this.mundo, this.numero, this.tipo, this.tema,
-      {this.jefe, this.fuego = false});
+      {this.jefe,
+      this.fuego = false,
+      this.arenaAcuatica = false,
+      this.caminoSecreto = false});
+
+  bool get esSecreto => mundo == 11;
 
   int get indice => (mundo - 1) * 8 + (numero - 1);
 
@@ -327,95 +460,165 @@ final List<Mundo> mundos = [
     const Nivel(1, 2, _c, Temas.cielo),
     const Nivel(1, 3, _s, Temas.planicie),
     const Nivel(1, 4, _f, Temas.castillo,
-        jefe: Jefe('Perro Guardián', 3, Color(0xFF8A6A4F))),
+        jefe: Jefe('Perro Guardián', 3, Color(0xFF8A6A4F),
+            Disfraz.guardian, {Habilidad.saltar})),
     const Nivel(1, 5, _c, Temas.cielo),
     const Nivel(1, 6, _c, Temas.cielo),
     const Nivel(1, 7, _s, Temas.bosque),
     const Nivel(1, 8, _f, Temas.castillo,
-        jefe: Jefe('Perro Caballero', 4, Color(0xFF6F6F80)), fuego: true),
+        jefe: Jefe('Perro Caballero', 4, Color(0xFF6F6F80),
+            Disfraz.caballero, {Habilidad.embestir, Habilidad.saltar}), fuego: true),
   ]),
   Mundo(2, 'El desierto', 'Arena, cactus y pirámides.',
       const Color(0xFFE0A84A), [
     for (final n in [1, 2, 3, 5, 6, 7]) Nivel(2, n, _s, Temas.desierto),
     const Nivel(2, 4, _f, Temas.piramide,
-        jefe: Jefe('Perro Momia', 3, Color(0xFFE8E0C8))),
+        jefe: Jefe('Perro Momia', 3, Color(0xFFE8E0C8),
+            Disfraz.momia, {Habilidad.saltar, Habilidad.onda, Habilidad.lanzarArco},
+            proyectil: TipoProyectil.espina)),
     const Nivel(2, 8, _f, Temas.piramide,
-        jefe: Jefe('Perro Faraón', 4, Color(0xFFD9A93A))),
+        jefe: Jefe('Perro Faraón', 4, Color(0xFFD9A93A),
+            Disfraz.faraon, {Habilidad.embestir, Habilidad.lanzarArco, Habilidad.lluvia},
+            proyectil: TipoProyectil.espina)),
   ]),
   Mundo(3, 'La playa', 'Playa arriba y mar abajo.', const Color(0xFF2A9FD6), [
     for (final n in [1, 2, 3]) Nivel(3, n, _s, Temas.playa),
     const Nivel(3, 4, _f, Temas.barco,
-        jefe: Jefe('Perro Pirata', 3, Color(0xFF9A5A3A))),
+        jefe: Jefe('Perro Pirata', 3, Color(0xFF9A5A3A),
+            Disfraz.pirata, {Habilidad.volar, Habilidad.lanzarArco, Habilidad.disparar},
+            proyectil: TipoProyectil.pescado),
+        arenaAcuatica: true),
     for (final n in [5, 6, 7]) Nivel(3, n, _a, Temas.marino),
     const Nivel(3, 8, _a, Temas.submarino,
-        jefe: Jefe('Perro Buzo', 4, Color(0xFFF2B33D))),
+        jefe: Jefe('Perro Buzo', 4, Color(0xFFF2B33D),
+            Disfraz.buzo, {Habilidad.volar, Habilidad.disparar, Habilidad.lanzarArco},
+            proyectil: TipoProyectil.pescado)),
   ]),
   Mundo(4, 'El cielo', 'Todo flota entre las nubes.', const Color(0xFF7CC7F2), [
     for (final n in [1, 2, 3, 5, 6, 7]) Nivel(4, n, _c, Temas.cielo),
     const Nivel(4, 4, _f, Temas.castilloCielo,
-        jefe: Jefe('Perro Nube', 4, Color(0xFFEDEBFF))),
+        jefe: Jefe('Perro Nube', 4, Color(0xFFEDEBFF),
+            Disfraz.nube, {Habilidad.volar, Habilidad.jetpack, Habilidad.lluvia},
+            proyectil: TipoProyectil.gota)),
     const Nivel(4, 8, _f, Temas.castilloCielo,
-        jefe: Jefe('Perro Trueno', 5, Color(0xFF6B5ED6))),
+        jefe: Jefe('Perro Trueno', 5, Color(0xFF6B5ED6),
+            Disfraz.trueno, {Habilidad.volar, Habilidad.jetpack, Habilidad.lluvia, Habilidad.disparar},
+            proyectil: TipoProyectil.rayo)),
   ]),
   Mundo(5, 'La nieve', 'Hielo, montañas e iglús.', const Color(0xFFA9D3EE), [
     for (final n in [1, 2, 3, 5, 6, 7]) Nivel(5, n, _s, Temas.nieve),
     const Nivel(5, 4, _f, Temas.iglu,
-        jefe: Jefe('Perro Esquimal', 4, Color(0xFFF2F2F2))),
+        jefe: Jefe('Perro Esquimal', 4, Color(0xFFF2F2F2),
+            Disfraz.esquimal, {Habilidad.lanzarArco, Habilidad.saltar},
+            proyectil: TipoProyectil.copo)),
     const Nivel(5, 8, _f, Temas.iglu,
-        jefe: Jefe('Perro de las Nieves', 5, Color(0xFFBFE3FF))),
+        jefe: Jefe('Perro de las Nieves', 5, Color(0xFFBFE3FF),
+            Disfraz.yeti, {Habilidad.saltar, Habilidad.onda, Habilidad.embestir, Habilidad.lanzarArco},
+            proyectil: TipoProyectil.copo)),
   ]),
   Mundo(6, 'Ciudad del futuro', 'Edificios y tecnología.',
       const Color(0xFF8B6CF0), [
     for (final n in [1, 2, 3, 5, 6, 7]) Nivel(6, n, _s, Temas.ciudad),
     const Nivel(6, 4, _f, Temas.fabrica,
-        jefe: Jefe('Perro Robot', 4, Color(0xFFB0B8C8))),
-    const Nivel(6, 8, _f, Temas.fabrica,
-        jefe: Jefe('Mega Perro Robot', 5, Color(0xFF7A86A0))),
+        jefe: Jefe('Perro Robot', 4, Color(0xFFB0B8C8),
+            Disfraz.robot, {Habilidad.disparar, Habilidad.saltar},
+            proyectil: TipoProyectil.laser)),
+    const Nivel(6, 8, _f, Temas.plataformaVoladora,
+        jefe: Jefe('Mega Perro Robot', 5, Color(0xFF7A86A0),
+            Disfraz.megaRobot, {Habilidad.volar, Habilidad.jetpack, Habilidad.disparar},
+            proyectil: TipoProyectil.laser)),
   ]),
   Mundo(7, 'Mundo de lava', 'Lava y volcanes.', const Color(0xFFE2542F), [
     Nivel(7, 1, _s, Temas.lava),
     Nivel(7, 2, _s, Temas.lava),
     Nivel(7, 3, _s, Temas.volcan, fuego: true),
     const Nivel(7, 4, _f, Temas.fortalezaLava,
-        jefe: Jefe('Perro de Fuego', 4, Color(0xFFFF7A2A)), fuego: true),
+        jefe: Jefe('Perro de Fuego', 4, Color(0xFFFF7A2A),
+            Disfraz.fuego, {Habilidad.erupcion, Habilidad.saltar, Habilidad.embestir, Habilidad.lanzarArco},
+            proyectil: TipoProyectil.fuego), fuego: true),
     Nivel(7, 5, _s, Temas.lava),
     Nivel(7, 6, _s, Temas.volcan, fuego: true),
     Nivel(7, 7, _s, Temas.lava, fuego: true),
     const Nivel(7, 8, _f, Temas.fortalezaLava,
-        jefe: Jefe('Perro Volcán', 5, Color(0xFFC0301A)), fuego: true),
+        jefe: Jefe('Perro Volcán', 5, Color(0xFFC0301A),
+            Disfraz.volcan, {Habilidad.erupcion, Habilidad.saltar, Habilidad.onda, Habilidad.lluvia},
+            proyectil: TipoProyectil.roca), fuego: true),
   ]),
   Mundo(8, 'Océano envenenado', 'Cuidado con el agua verde.',
       const Color(0xFF7BB64A), [
-    for (final n in [1, 2, 3, 5, 6, 7]) Nivel(8, n, _s, Temas.veneno),
+    for (final n in [1, 2, 3, 5, 6, 7]) Nivel(8, n, _c, Temas.veneno),
     const Nivel(8, 4, _f, Temas.laboratorio,
-        jefe: Jefe('Perro Tóxico', 5, Color(0xFF9AE04A))),
+        jefe: Jefe('Perro Tóxico', 5, Color(0xFF9AE04A),
+            Disfraz.toxico, {Habilidad.lanzarArco, Habilidad.disparar},
+            proyectil: TipoProyectil.veneno)),
     const Nivel(8, 8, _f, Temas.laboratorio,
-        jefe: Jefe('Perro Mutante', 6, Color(0xFF5FB03A))),
+        jefe: Jefe('Perro Mutante', 6, Color(0xFF5FB03A),
+            Disfraz.mutante, {Habilidad.embestir, Habilidad.saltar, Habilidad.onda, Habilidad.lanzarArco},
+            proyectil: TipoProyectil.veneno)),
   ]),
-  Mundo(9, 'Mundo de prueba', 'Demuestra todo lo que sabes.',
-      const Color(0xFFF2A33A), [
-    Nivel(9, 1, _s, Temas.planicie),
-    Nivel(9, 2, _s, Temas.desierto),
-    Nivel(9, 3, _a, Temas.marino),
-    const Nivel(9, 4, _f, Temas.torre,
-        jefe: Jefe('Perro Maestro', 5, Color(0xFF8C6FD0)), fuego: true),
-    Nivel(9, 5, _c, Temas.cielo),
-    Nivel(9, 6, _s, Temas.nieve),
-    Nivel(9, 7, _s, Temas.volcan, fuego: true),
-    const Nivel(9, 8, _f, Temas.torre,
-        jefe: Jefe('Gran Perro Maestro', 6, Color(0xFF5A3FA0)), fuego: true),
+  Mundo(9, 'Caja de pruebas', 'Una sala de pruebas para demostrar todo lo que sabes.',
+      const Color(0xFF2FA4FF), [
+    Nivel(9, 1, _s, Temas.caja),
+    Nivel(9, 2, _c, Temas.caja),
+    Nivel(9, 3, _a, Temas.cajaAgua),
+    const Nivel(9, 4, _f, Temas.caja,
+        jefe: Jefe('Perro Maestro', 5, Color(0xFF8C6FD0),
+            Disfraz.maestro, {Habilidad.saltar, Habilidad.onda, Habilidad.embestir, Habilidad.disparar},
+            proyectil: TipoProyectil.estrella)),
+    Nivel(9, 5, _s, Temas.caja, caminoSecreto: true),
+    Nivel(9, 6, _c, Temas.caja),
+    Nivel(9, 7, _s, Temas.caja),
+    const Nivel(9, 8, _f, Temas.caja,
+        jefe: Jefe('Gran Perro Maestro', 6, Color(0xFF5A3FA0),
+            Disfraz.granMaestro, {Habilidad.volar, Habilidad.lluvia, Habilidad.disparar, Habilidad.lanzarArco},
+            proyectil: TipoProyectil.estrella)),
   ]),
   Mundo(10, 'Bosque abandonado', 'Al final espera el Perro Supremo.',
       const Color(0xFF56604F), [
     for (final n in [1, 2, 3, 4, 5, 6, 7]) Nivel(10, n, _s, Temas.abandonado),
     const Nivel(10, 8, _f, Temas.castilloFinal,
-        jefe: Jefe('El Perro Supremo', 8, Color(0xFF8A6A4F),
-            lanzaHuesos: true, corona: true),
+        jefe: Jefe('El Perro Supremo', 10, Color(0xFF8A6A4F), Disfraz.supremo,
+            {
+              Habilidad.saltar,
+              Habilidad.onda,
+              Habilidad.embestir,
+              Habilidad.lanzarArco,
+              Habilidad.disparar,
+              Habilidad.lluvia,
+              Habilidad.erupcion,
+              Habilidad.jetpack,
+            },
+            proyectil: TipoProyectil.hueso),
         fuego: true),
   ]),
 ];
 
-/// Los 80 niveles en orden.
+/// El mundo secreto: se abre desde el nivel 9-5.
+final Mundo mundoSecreto = Mundo(11, 'Mundo secreto',
+    'Un mundo gigante donde Paco es diminuto.', const Color(0xFFF2C94C), [
+  Nivel(11, 1, _s, Temas.gigante),
+  Nivel(11, 2, _c, Temas.gigante),
+  Nivel(11, 3, _a, Temas.charcoGigante),
+  const Nivel(11, 4, _f, Temas.gigante,
+      jefe: Jefe('Perro Gigante', 6, Color(0xFFB07A4A), Disfraz.gigante,
+          {Habilidad.saltar, Habilidad.onda, Habilidad.lanzarArco},
+          proyectil: TipoProyectil.roca, tamano: 1.6)),
+  Nivel(11, 5, _s, Temas.gigante, fuego: true),
+  Nivel(11, 6, _c, Temas.gigante),
+  Nivel(11, 7, _s, Temas.gigante, fuego: true),
+  const Nivel(11, 8, _f, Temas.gigante,
+      jefe: Jefe('Perro Titán', 8, Color(0xFF8A8FA3), Disfraz.titan, {
+        Habilidad.saltar,
+        Habilidad.onda,
+        Habilidad.embestir,
+        Habilidad.lanzarArco,
+        Habilidad.erupcion,
+      }, proyectil: TipoProyectil.roca, tamano: 1.8),
+      fuego: true),
+]);
+
+/// Los 80 niveles en orden, y después los 8 del mundo secreto.
 final List<Nivel> todosLosNiveles = [
-  for (final m in mundos) ...m.niveles
+  for (final m in mundos) ...m.niveles,
+  ...mundoSecreto.niveles,
 ];
