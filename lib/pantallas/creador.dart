@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -258,6 +259,11 @@ class _PantallaEditorState extends State<PantallaEditor> {
   late Motor motor;
   final _repintar = ValueNotifier(0);
   double camX = 0;
+
+  /// El editor enseña las casillas más grandes que el juego, así que
+  /// también se mueve de arriba abajo (en casillas).
+  double camY = 0;
+  Size _vista = Size.zero;
   int pestana = 0;
   Herramienta herramienta = const PonerCasilla(Casilla.tierra);
   Timer? _guardado;
@@ -304,11 +310,15 @@ class _PantallaEditorState extends State<PantallaEditor> {
     _guardado = Timer(const Duration(seconds: 1), NivelesCreados.guardar);
   }
 
-  double _escala(Size s) => s.height / Mapa.alto;
+  /// Tamaño de una casilla en pantalla: al menos 30 para poder tocarla.
+  static double _escala(Size s) => max(s.height / Mapa.alto, 30);
 
-  void _mover(double casillas) {
-    final vista = motor.anchoVista;
-    camX = (camX + casillas).clamp(0.0, (n.ancho - vista).clamp(0.0, 1e9));
+  void _mover(double dx, [double dy = 0]) {
+    final s = _escala(_vista);
+    final ancho = _vista.width / s;
+    final alto = _vista.height / s;
+    camX = (camX + dx).clamp(0.0, max(0.0, n.ancho - ancho));
+    camY = (camY + dy).clamp(0.0, max(0.0, Mapa.alto - alto));
     motor.camX = camX;
     _repintar.value++;
   }
@@ -316,8 +326,14 @@ class _PantallaEditorState extends State<PantallaEditor> {
   void _tocar(Offset p, Size size) {
     final s = _escala(size);
     final x = (p.dx / s + camX).floor();
-    final y = (p.dy / s).floor();
+    var y = (p.dy / s + camY).floor();
     if (x < 0 || x >= n.ancho || y < 0 || y >= Mapa.alto) return;
+    // Enemigos, Paco y banderas se ponen encima del suelo, sin romperlo
+    if (herramienta is PonerEnemigo || herramienta is PonerMarca) {
+      while (y > 0 && esSolida(n.casillas[x][y])) {
+        y--;
+      }
+    }
     if (_ultima == (x, y)) return;
     _ultima = (x, y);
     switch (herramienta) {
@@ -326,7 +342,7 @@ class _PantallaEditorState extends State<PantallaEditor> {
         _quitarEnemigo(x, y);
       case PonerEnemigo(:final tipo):
         _quitarEnemigo(x, y);
-        n.casillas[x][y] = Casilla.vacio;
+        if (n.casillas[x][y] != Casilla.liquido) n.casillas[x][y] = Casilla.vacio;
         // Los de suelo se apoyan en el fondo de la casilla
         n.enemigos.add(
             Aparicion(tipo, x + 0.03, _flota(tipo) ? y + 0.15 : y + 1.0));
@@ -602,6 +618,13 @@ class _PantallaEditorState extends State<PantallaEditor> {
   Widget _zona() {
     return LayoutBuilder(builder: (context, c) {
       final size = Size(c.maxWidth, c.maxHeight);
+      if (_vista != size) {
+        final primera = _vista == Size.zero;
+        _vista = size;
+        // Al abrir, se ve el suelo
+        if (primera) camY = 99;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _mover(0));
+      }
       return Stack(
         children: [
           Positioned.fill(
@@ -613,14 +636,14 @@ class _PantallaEditorState extends State<PantallaEditor> {
               onScaleStart: (_) => _ultima = null,
               onScaleUpdate: (d) {
                 if (d.pointerCount >= 2) {
-                  _mover(-d.focalPointDelta.dx / _escala(size));
+                  final s = _escala(size);
+                  _mover(-d.focalPointDelta.dx / s, -d.focalPointDelta.dy / s);
                 } else {
                   _tocar(d.localFocalPoint, size);
                 }
               },
               child: CustomPaint(
-                painter: PintorJuego(motor, _repintar),
-                foregroundPainter: _Rejilla(motor, _repintar),
+                painter: _VistaEditor(this),
                 size: size,
               ),
             ),
@@ -628,26 +651,35 @@ class _PantallaEditorState extends State<PantallaEditor> {
           // Flechas para moverse por el nivel
           Positioned(
             left: 6,
-            bottom: 6,
-            child: _flecha(Icons.chevron_left_rounded, -6),
+            top: 6,
+            child: _flecha(Icons.chevron_left_rounded, () => _mover(-6)),
           ),
           Positioned(
             right: 6,
-            bottom: 6,
-            child: _flecha(Icons.chevron_right_rounded, 6),
+            top: 6,
+            child: Column(
+              children: [
+                _flecha(Icons.chevron_right_rounded, () => _mover(6)),
+                const SizedBox(height: 6),
+                _flecha(Icons.keyboard_arrow_up_rounded, () => _mover(0, -3)),
+                const SizedBox(height: 6),
+                _flecha(Icons.keyboard_arrow_down_rounded, () => _mover(0, 3)),
+              ],
+            ),
           ),
         ],
       );
     });
   }
 
-  Widget _flecha(IconData icono, double paso) => Material(
+  Widget _flecha(IconData icono, VoidCallback alTocar) => Material(
         color: Colors.black45,
         shape: const CircleBorder(),
         child: IconButton(
-          iconSize: 34,
+          iconSize: 30,
+          visualDensity: VisualDensity.compact,
           icon: Icon(icono, color: Colors.white),
-          onPressed: () => _mover(paso),
+          onPressed: alTocar,
         ),
       );
 
@@ -743,34 +775,41 @@ class _PantallaEditorState extends State<PantallaEditor> {
   }
 }
 
-/// Cuadrícula encima del nivel, con las marcas de inicio y control.
-class _Rejilla extends CustomPainter {
-  final Motor motor;
-  _Rejilla(this.motor, Listenable repintar) : super(repaint: repintar);
+/// El nivel como en el juego pero con casillas grandes y una cuadrícula.
+class _VistaEditor extends CustomPainter {
+  final _PantallaEditorState e;
+  _VistaEditor(this.e) : super(repaint: e._repintar);
 
   @override
   void paint(Canvas c, Size size) {
-    final s = size.height / Mapa.alto;
+    final s = _PantallaEditorState._escala(size);
+    final motor = e.motor;
+    c.save();
+    c.clipRect(Offset.zero & size);
+    c.translate(0, -e.camY * s);
+    PintorJuego(motor, e._repintar).paint(c, Size(size.width, s * Mapa.alto));
     final linea = Paint()
-      ..color = Colors.white.withValues(alpha: 0.18)
+      ..color = Colors.white.withValues(alpha: 0.2)
       ..strokeWidth = 1;
+    final alto = s * Mapa.alto;
     final desfase = (motor.camX % 1) * s;
     for (var x = -desfase; x < size.width; x += s) {
-      c.drawLine(Offset(x, 0), Offset(x, size.height), linea);
+      c.drawLine(Offset(x, 0), Offset(x, alto), linea);
     }
-    for (var y = 0.0; y <= size.height; y += s) {
+    for (var y = 0.0; y <= alto + 0.5; y += s) {
       c.drawLine(Offset(0, y), Offset(size.width, y), linea);
     }
-    // Fin del nivel
+    // Más allá del final del nivel
     final fin = (motor.mapa.ancho - motor.camX) * s;
     if (fin < size.width) {
-      c.drawRect(Rect.fromLTRB(fin, 0, size.width, size.height),
+      c.drawRect(Rect.fromLTRB(fin, 0, size.width, alto),
           Paint()..color = Colors.black54);
     }
+    c.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _Rejilla old) => true;
+  bool shouldRepaint(covariant _VistaEditor old) => true;
 }
 
 /// Pinta una casilla o un enemigo como en el juego, para la paleta.
