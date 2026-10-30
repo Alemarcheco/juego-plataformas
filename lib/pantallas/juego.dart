@@ -2,15 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../datos/creados.dart';
+import '../datos/logros.dart';
 import '../datos/mundos.dart';
+import '../datos/skins.dart';
 import '../juego/motor.dart';
 import '../juego/pintor.dart';
 import '../progreso.dart';
+import '../sonido.dart';
 import 'comunes.dart';
 
 class PantallaJuego extends StatefulWidget {
   final Nivel nivel;
-  const PantallaJuego({super.key, required this.nivel});
+
+  /// Nivel hecho en el creador (no cuenta para el progreso).
+  final NivelCreado? creado;
+
+  /// Dos gatos en el mismo teléfono, cada uno con sus botones.
+  final bool dosJugadores;
+  const PantallaJuego(
+      {super.key, required this.nivel, this.creado, this.dosJugadores = false});
 
   @override
   State<PantallaJuego> createState() => _PantallaJuegoState();
@@ -19,7 +30,8 @@ class PantallaJuego extends StatefulWidget {
 class _PantallaJuegoState extends State<PantallaJuego>
     with SingleTickerProviderStateMixin {
   late Nivel nivel = widget.nivel;
-  late Motor motor = Motor(nivel);
+  late Motor motor = Motor(nivel,
+      crearMapa: widget.creado?.mapa, dosJugadores: widget.dosJugadores);
   late final Ticker _ticker;
   final _cuadro = ValueNotifier<int>(0);
   final _foco = FocusNode();
@@ -27,14 +39,21 @@ class _PantallaJuegoState extends State<PantallaJuego>
   bool pausa = false;
   bool fin = false;
 
+  /// Logro recién ganado que se enseña arriba un momento.
+  Logro? _logro;
+  int _logroCuadros = 0;
+
   // Teclado y botones táctiles se suman
   final Set<LogicalKeyboardKey> _teclas = {};
   bool _tIzq = false, _tDer = false, _tSalto = false;
+  // Botones del segundo jugador
+  bool _tIzq2 = false, _tDer2 = false, _tSalto2 = false;
 
   @override
   void initState() {
     super.initState();
     _ticker = createTicker(_tick)..start();
+    _ponerMusica();
   }
 
   void _tick(Duration ahora) {
@@ -46,24 +65,76 @@ class _PantallaJuegoState extends State<PantallaJuego>
     final pescadosAntes = motor.pescados;
     final estadoAntes = motor.estado;
     final jefeAntes = motor.jefe?.vidas;
+    final gatosAntes = _gatos();
+    final cerradaAntes = motor.puertaCerrada;
     motor.actualizar(dt);
     _cuadro.value++;
+    for (final s in motor.sonidos) {
+      Sonido.efecto(s);
+    }
+    motor.sonidos.clear();
+    if (motor.puertaCerrada != cerradaAntes) _ponerMusica();
+    if (motor.derrotados.isNotEmpty) {
+      for (final t in motor.derrotados) {
+        Progreso.contarDerrota(t.name).then(_avisarLogros);
+      }
+      motor.derrotados.clear();
+    }
+    if (_logro != null && --_logroCuadros <= 0) setState(() => _logro = null);
     if (motor.vidas != vidasAntes ||
         motor.pescados != pescadosAntes ||
         motor.estado != estadoAntes ||
         motor.jefe?.vidas != jefeAntes ||
+        _gatos() != gatosAntes ||
         motor.jefe?.activo == true && jefeAntes == null) {
       setState(() {});
     }
-    if (motor.terminado && !fin) {
+    if (motor.terminado && !fin && widget.creado != null) {
       fin = true;
-      Progreso.completar(nivel.indice, motor.pescados);
+      setState(() {});
+    } else if (motor.terminado && !fin) {
+      fin = true;
+      Progreso.completar(nivel.indice, motor.pescados)
+          .then((_) => Progreso.revisarLogros())
+          .then(_avisarLogros);
       if (motor.secretoEncontrado) Progreso.abrirSecreto();
       setState(() {});
     }
   }
 
+  /// Vidas de los dos gatos, para saber si hay que redibujar los corazones.
+  String _gatos() =>
+      motor.jugadores.map((j) => j.vivo ? j.vidas : -1).join(',');
+
+  /// La canción del nivel; en la pelea con el jefe, la del jefe.
+  void _ponerMusica() {
+    final jefe = motor.puertaCerrada && motor.jefe != null;
+    Sonido.musica(jefe ? 'jefe' : widget.creado?.musica ?? musicaDe(nivel));
+  }
+
+  void _avisarLogros(List<Logro> nuevos) {
+    if (nuevos.isEmpty || !mounted) return;
+    Sonido.efecto('logro');
+    setState(() {
+      _logro = nuevos.last;
+      _logroCuadros = 60 * 4;
+    });
+  }
+
   void _aplicarMandos() {
+    if (motor.jugadores.isNotEmpty) {
+      // Jugador 1: botones de la izquierda o A, D, W. Jugador 2: botones de
+      // la derecha o las flechas.
+      final m1 = motor.jugadores[0].mandos;
+      m1.izquierda = _tIzq || _teclas.contains(LogicalKeyboardKey.keyA);
+      m1.derecha = _tDer || _teclas.contains(LogicalKeyboardKey.keyD);
+      m1.salto = _tSalto || _teclas.contains(LogicalKeyboardKey.keyW);
+      final m2 = motor.jugadores[1].mandos;
+      m2.izquierda = _tIzq2 || _teclas.contains(LogicalKeyboardKey.arrowLeft);
+      m2.derecha = _tDer2 || _teclas.contains(LogicalKeyboardKey.arrowRight);
+      m2.salto = _tSalto2 || _teclas.contains(LogicalKeyboardKey.arrowUp);
+      return;
+    }
     final m = motor.mandos;
     m.izquierda = _tIzq ||
         _teclas.contains(LogicalKeyboardKey.arrowLeft) ||
@@ -93,10 +164,11 @@ class _PantallaJuegoState extends State<PantallaJuego>
   void _cambiarNivel(Nivel n) {
     setState(() {
       nivel = n;
-      motor = Motor(n);
+      motor = Motor(n, dosJugadores: widget.dosJugadores);
       fin = false;
       pausa = false;
     });
+    _ponerMusica();
   }
 
   void _reiniciar() {
@@ -105,9 +177,11 @@ class _PantallaJuegoState extends State<PantallaJuego>
       fin = false;
       pausa = false;
     });
+    _ponerMusica();
   }
 
   Nivel? get _siguiente {
+    if (widget.creado != null) return null;
     if (motor.secretoEncontrado) return mundoSecreto.niveles.first;
     final i = nivel.indice + 1;
     if (nivel.indice == 79 || i >= todosLosNiveles.length) return null;
@@ -116,6 +190,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
 
   @override
   void dispose() {
+    Sonido.musica('planicie');
     _ticker.dispose();
     _foco.dispose();
     _cuadro.dispose();
@@ -139,6 +214,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
             ),
             SafeArea(child: _hud()),
             if (!fin) SafeArea(child: _controles()),
+            if (_logro != null) _avisoLogro(_logro!),
             if (pausa) _ventanaPausa(),
             if (fin) _ventanaFin(),
           ],
@@ -155,19 +231,25 @@ class _PantallaJuegoState extends State<PantallaJuego>
         children: [
           Row(
             children: [
-              for (var i = 0; i < motor.vidas; i++)
-                const Padding(
-                  padding: EdgeInsets.only(right: 2),
-                  child: Icon(Icons.favorite_rounded,
-                      color: Color(0xFFFF4D6D), size: 26),
-                ),
+              if (motor.jugadores.isEmpty)
+                _corazones(motor.vidas)
+              else
+                for (final (i, j) in motor.jugadores.indexed) ...[
+                  RetratoPaco(
+                      tamano: 26,
+                      skin: i == 0 ? Progreso.skin : Progreso.skinSegundo),
+                  const SizedBox(width: 4),
+                  _corazones(j.vivo ? j.vidas : 0),
+                  const SizedBox(width: 10),
+                ],
               const SizedBox(width: 12),
               const Icon(Icons.set_meal_rounded,
                   color: Color(0xFFFFC93C), size: 24),
               const SizedBox(width: 4),
               _texto('${motor.pescados}'),
               const Spacer(),
-              _texto('Mundo ${nivel.mundo}-${nivel.numero} · ${nivel.tema.nombre}'),
+              _texto(nivel.creado ??
+                  'Mundo ${nivel.mundo}-${nivel.numero} · ${nivel.tema.nombre}'),
               const SizedBox(width: 8),
               _botonRedondo(Icons.pause_rounded, () {
                 setState(() => pausa = true);
@@ -201,6 +283,55 @@ class _PantallaJuegoState extends State<PantallaJuego>
     );
   }
 
+  Widget _avisoLogro(Logro l) {
+    final skin = skins.firstWhere((s) => s.id == l.skin);
+    return Positioned(
+      top: 56,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 8, 18, 8),
+          decoration: BoxDecoration(
+            color: const Color(0xEE1F2D40),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFFFC93C), width: 2),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RetratoPaco(tamano: 46, skin: skin),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('¡Logro: ${l.nombre}!',
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFFFFC93C))),
+                  Text('Ganaste el traje ${skin.nombre}',
+                      style: const TextStyle(fontSize: 14, color: Colors.white)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _corazones(int n) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < n; i++)
+            const Padding(
+              padding: EdgeInsets.only(right: 2),
+              child: Icon(Icons.favorite_rounded,
+                  color: Color(0xFFFF4D6D), size: 24),
+            ),
+        ],
+      );
+
   Widget _texto(String t) => Text(
         t,
         style: TextStyle(
@@ -225,6 +356,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
       );
 
   Widget _controles() {
+    if (motor.jugadores.isNotEmpty) return _controlesDos();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       child: Align(
@@ -254,6 +386,45 @@ class _PantallaJuegoState extends State<PantallaJuego>
     );
   }
 
+  /// Cada jugador tiene izquierda, derecha y salto en su mitad.
+  Widget _controlesDos() {
+    final salto = motor.enAgua ? Icons.waves_rounded : Icons.arrow_upward_rounded;
+    Widget juego(bool segundo) => Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            BotonTactil(
+              icono: Icons.arrow_back_rounded,
+              tamano: 62,
+              alCambiar: (v) => segundo ? _tIzq2 = v : _tIzq = v,
+            ),
+            const SizedBox(width: 8),
+            BotonTactil(
+              icono: Icons.arrow_forward_rounded,
+              tamano: 62,
+              alCambiar: (v) => segundo ? _tDer2 = v : _tDer = v,
+            ),
+            const SizedBox(width: 8),
+            BotonTactil(
+              icono: salto,
+              tamano: 72,
+              color: segundo ? Progreso.skinSegundo.cuerpo : Progreso.skin.cuerpo,
+              alCambiar: (v) => segundo ? _tSalto2 = v : _tSalto = v,
+            ),
+          ],
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [juego(false), const Spacer(), juego(true)],
+        ),
+      ),
+    );
+  }
+
   Widget _velo(Widget hijo) => Positioned.fill(
         child: Container(
           color: Colors.black.withValues(alpha: 0.6),
@@ -268,7 +439,9 @@ class _PantallaJuegoState extends State<PantallaJuego>
       children: [
         const Text('Pausa',
             style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 18),
+        const SizedBox(height: 8),
+        const InterruptoresSonido(),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 12,
           runSpacing: 12,

@@ -39,6 +39,18 @@ enum TipoEnemigo {
 
   /// Perro de espinas: se infla y explota cuando Paco se acerca.
   espinoso,
+
+  /// Perro robot: lanza una bomba que flota y explota en 8 espinas.
+  robot,
+
+  /// Pez globo: se hincha cuando Paco se acerca y explota en 8 espinas.
+  pezGlobo,
+
+  /// Pez de hielo: dispara espinas de hielo en horizontal.
+  pezHielo,
+
+  /// Pez morado: persigue a Paco.
+  pezMorado,
 }
 
 class Aparicion {
@@ -58,6 +70,11 @@ class Mapa {
   double inicioY = 5;
   double metaX = 0;
   double controlX = 0;
+
+  /// En los niveles del creador las banderas van donde se pusieron
+  /// (fila de la casilla donde se apoyan); si no, sobre el suelo.
+  int? metaY;
+  int? controlY;
 
   /// Para niveles con jefe: dónde empieza la arena.
   double? arenaX;
@@ -92,6 +109,19 @@ class Mapa {
       if (esSolida(en(x, y))) return y;
     }
     return alto;
+  }
+
+  /// Fila del suelo donde se puede estar de pie, saltándose el techo
+  /// (en castillos y pirámides la columna empieza con bloques arriba).
+  int suelo(int x) {
+    var y = 0;
+    while (y < alto && esSolida(en(x, y))) {
+      y++;
+    }
+    while (y < alto && !esSolida(en(x, y))) {
+      y++;
+    }
+    return y;
   }
 }
 
@@ -173,6 +203,7 @@ class _Generador {
       if (w == 5 || w >= 9) TipoEnemigo.hielo,
       if (w == 6 || w == 7 || w >= 9) TipoEnemigo.llamas,
       if (w == 6 || w == 8 || w >= 9) TipoEnemigo.acido,
+      if (w == 6 || w >= 9) TipoEnemigo.robot,
     ];
     if (especiales.isNotEmpty && azar(0.4)) {
       return especiales[r.nextInt(especiales.length)];
@@ -527,8 +558,16 @@ class _Generador {
         }
       }
       if (azar(probEnemigo)) {
+        final tirada = r.nextDouble();
+        final pez = tirada < 0.4
+            ? TipoEnemigo.pez
+            : tirada < 0.6
+                ? TipoEnemigo.pezGlobo
+                : tirada < 0.8
+                    ? TipoEnemigo.pezHielo
+                    : TipoEnemigo.pezMorado;
         m.enemigos.add(Aparicion(
-            TipoEnemigo.pez, x + n / 2, entre(techoAlto + 3, piso - 2) * 1.0));
+            pez, x + n / 2, entre(techoAlto + 3, piso - 2) * 1.0));
       }
       if (d >= 2 && azar(0.25)) {
         m.poner(x + 1, piso - 1, Casilla.pinchos);

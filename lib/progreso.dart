@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'datos/logros.dart';
 import 'datos/skins.dart';
 
 /// Guarda hasta qué nivel ha llegado Paco, los pescados y los trajes.
@@ -18,6 +19,26 @@ class Progreso {
   /// Se encontró el camino secreto del nivel 9-5.
   static bool secreto = false;
 
+  /// El creador de niveles se compra en la tienda.
+  static const precioCreador = 100;
+  static bool creador = false;
+
+  /// Enemigos derrotados por tipo (para los logros).
+  static final Map<String, int> derrotados = {};
+  static final Set<String> logrados = {};
+
+  /// Índice del último nivel principal (10-8) y del último secreto.
+  static const ultimoPrincipal = 79;
+  static const ultimoSecreto = 83;
+
+  static int avance(Logro l) => switch (l.id) {
+        'fuego' => derrotados['llamas'] ?? 0,
+        'acido' => derrotados['acido'] ?? 0,
+        'campeon' => completado(ultimoPrincipal) ? 1 : 0,
+        'hongo' => completado(ultimoSecreto) ? 1 : 0,
+        _ => 0,
+      };
+
   /// ¿Se puede jugar este nivel?
   static bool abierto(int indice) {
     if (indice < 80) return indice <= desbloqueado;
@@ -28,11 +49,15 @@ class Progreso {
   static Skin get skin =>
       skins.firstWhere((s) => s.id == skinActual, orElse: () => skins.first);
 
+  /// Traje del segundo gato en el modo de dos jugadores: otro distinto.
+  static Skin get skinSegundo =>
+      skins.firstWhere((s) => s.id == (skinActual == 'gris' ? 'naranja' : 'gris'));
+
   static Future<void> cargar() async {
     try {
       _prefs = await SharedPreferences.getInstance();
       desbloqueado = _prefs!.getInt(_claveDesbloqueado) ?? 0;
-      for (var i = 0; i < 80; i++) {
+      for (var i = 0; i <= ultimoSecreto; i++) {
         final p = _prefs!.getInt('pescados_$i');
         if (p != null) pescados[i] = p;
       }
@@ -41,6 +66,11 @@ class Progreso {
       comprados.addAll(_prefs!.getStringList('comprados') ?? const []);
       skinActual = _prefs!.getString('skin') ?? 'naranja';
       secreto = _prefs!.getBool('secreto') ?? false;
+      for (final k in ['llamas', 'acido']) {
+        derrotados[k] = _prefs!.getInt('derrotados_$k') ?? 0;
+      }
+      logrados.addAll(_prefs!.getStringList('logros') ?? const []);
+      creador = _prefs!.getBool('creador') ?? false;
     } catch (_) {
       // Sin almacenamiento se juega igual, solo que no se guarda.
     }
@@ -60,6 +90,34 @@ class Progreso {
     } catch (_) {}
   }
 
+  /// Cuenta un enemigo derrotado. Devuelve los logros que se acaban de ganar.
+  static Future<List<Logro>> contarDerrota(String tipo) async {
+    if (tipo != 'llamas' && tipo != 'acido') return const [];
+    derrotados[tipo] = (derrotados[tipo] ?? 0) + 1;
+    try {
+      await _prefs?.setInt('derrotados_$tipo', derrotados[tipo]!);
+    } catch (_) {}
+    return revisarLogros();
+  }
+
+  /// Da los trajes de los logros conseguidos. Devuelve los nuevos.
+  static Future<List<Logro>> revisarLogros() async {
+    final nuevos = [
+      for (final l in logros)
+        if (!logrados.contains(l.id) && avance(l) >= l.meta) l
+    ];
+    if (nuevos.isEmpty) return nuevos;
+    for (final l in nuevos) {
+      logrados.add(l.id);
+      comprados.add(l.skin);
+    }
+    try {
+      await _prefs?.setStringList('logros', logrados.toList());
+    } catch (_) {}
+    await _guardarTienda();
+    return nuevos;
+  }
+
   static Future<void> abrirSecreto() async {
     secreto = true;
     try {
@@ -70,11 +128,24 @@ class Progreso {
   /// Compra un traje si hay pescados suficientes. Devuelve si se compró.
   static Future<bool> comprar(Skin s) async {
     if (comprados.contains(s.id)) return true;
+    if (s.logro != null) return false;
     if (monedero < s.precio) return false;
     monedero -= s.precio;
     comprados.add(s.id);
     skinActual = s.id;
     await _guardarTienda();
+    return true;
+  }
+
+  static Future<bool> comprarCreador() async {
+    if (creador) return true;
+    if (monedero < precioCreador) return false;
+    monedero -= precioCreador;
+    creador = true;
+    try {
+      await _prefs?.setBool('creador', true);
+      await _prefs?.setInt('monedero', monedero);
+    } catch (_) {}
     return true;
   }
 

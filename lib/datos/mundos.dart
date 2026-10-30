@@ -48,6 +48,37 @@ class Tema {
 }
 
 class Temas {
+  /// Todos los fondos, para elegir en el creador de niveles.
+  static const Map<String, Tema> todos = {
+    'planicie': planicie,
+    'cielo': cielo,
+    'bosque': bosque,
+    'castillo': castillo,
+    'desierto': desierto,
+    'piramide': piramide,
+    'playa': playa,
+    'barco': barco,
+    'marino': marino,
+    'submarino': submarino,
+    'castilloCielo': castilloCielo,
+    'nieve': nieve,
+    'iglu': iglu,
+    'ciudad': ciudad,
+    'fabrica': fabrica,
+    'lava': lava,
+    'volcan': volcan,
+    'fortalezaLava': fortalezaLava,
+    'veneno': veneno,
+    'laboratorio': laboratorio,
+    'caja': caja,
+    'cajaAgua': cajaAgua,
+    'plataformaVoladora': plataformaVoladora,
+    'gigante': gigante,
+    'charcoGigante': charcoGigante,
+    'abandonado': abandonado,
+    'castilloFinal': castilloFinal,
+  };
+
   static const planicie = Tema(
     nombre: 'Planicie',
     cieloArriba: Color(0xFF6EC6FF),
@@ -382,6 +413,7 @@ enum TipoProyectil {
   copo,
   espinaNieve,
   onda,
+  bomba,
 }
 
 class Jefe {
@@ -418,11 +450,15 @@ class Nivel {
   /// Yendo hacia atrás al empezar se llega al mundo secreto.
   final bool caminoSecreto;
 
+  /// Nombre de un nivel hecho en el creador de niveles (si no, null).
+  final String? creado;
+
   const Nivel(this.mundo, this.numero, this.tipo, this.tema,
       {this.jefe,
       this.fuego = false,
       this.arenaAcuatica = false,
-      this.caminoSecreto = false});
+      this.caminoSecreto = false,
+      this.creado});
 
   bool get esSecreto => mundo == 11;
 
@@ -561,17 +597,11 @@ final List<Mundo> mundos = [
     Nivel(9, 1, _s, Temas.caja),
     Nivel(9, 2, _c, Temas.caja),
     Nivel(9, 3, _a, Temas.cajaAgua),
-    const Nivel(9, 4, _f, Temas.caja,
-        jefe: Jefe('Perro Maestro', 5, Color(0xFF8C6FD0),
-            Disfraz.maestro, {Habilidad.saltar, Habilidad.onda, Habilidad.embestir, Habilidad.disparar},
-            proyectil: TipoProyectil.estrella)),
+    Nivel(9, 4, _f, Temas.caja),
     Nivel(9, 5, _s, Temas.caja, caminoSecreto: true),
     Nivel(9, 6, _c, Temas.caja),
     Nivel(9, 7, _s, Temas.caja),
-    const Nivel(9, 8, _f, Temas.caja,
-        jefe: Jefe('Gran Perro Maestro', 6, Color(0xFF5A3FA0),
-            Disfraz.granMaestro, {Habilidad.volar, Habilidad.lluvia, Habilidad.disparar, Habilidad.lanzarArco},
-            proyectil: TipoProyectil.estrella)),
+    Nivel(9, 8, _f, Temas.caja),
   ]),
   Mundo(10, 'Bosque abandonado', 'Al final espera el Perro Supremo.',
       const Color(0xFF56604F), [
@@ -599,25 +629,10 @@ final Mundo mundoSecreto = Mundo(11, 'Mundo secreto',
   Nivel(11, 1, _s, Temas.gigante),
   Nivel(11, 2, _c, Temas.gigante),
   Nivel(11, 3, _a, Temas.charcoGigante),
-  const Nivel(11, 4, _f, Temas.gigante,
-      jefe: Jefe('Perro Gigante', 6, Color(0xFFB07A4A), Disfraz.gigante,
-          {Habilidad.saltar, Habilidad.onda, Habilidad.lanzarArco},
-          proyectil: TipoProyectil.roca, tamano: 1.6)),
-  Nivel(11, 5, _s, Temas.gigante, fuego: true),
-  Nivel(11, 6, _c, Temas.gigante),
-  Nivel(11, 7, _s, Temas.gigante, fuego: true),
-  const Nivel(11, 8, _f, Temas.gigante,
-      jefe: Jefe('Perro Titán', 8, Color(0xFF8A8FA3), Disfraz.titan, {
-        Habilidad.saltar,
-        Habilidad.onda,
-        Habilidad.embestir,
-        Habilidad.lanzarArco,
-        Habilidad.erupcion,
-      }, proyectil: TipoProyectil.roca, tamano: 1.8),
-      fuego: true),
+  Nivel(11, 4, _f, Temas.gigante, fuego: true),
 ]);
 
-/// Los 80 niveles en orden, y después los 8 del mundo secreto.
+/// Los 80 niveles en orden, y después los 4 del mundo secreto (sin jefes).
 final List<Nivel> todosLosNiveles = [
   for (final m in mundos) ...m.niveles,
   ...mundoSecreto.niveles,
