@@ -49,6 +49,10 @@ class Progreso {
   static Skin get skin =>
       skins.firstWhere((s) => s.id == skinActual, orElse: () => skins.first);
 
+  /// Traje del segundo gato en el modo de dos jugadores: otro distinto.
+  static Skin get skinSegundo =>
+      skins.firstWhere((s) => s.id == (skinActual == 'gris' ? 'naranja' : 'gris'));
+
   static Future<void> cargar() async {
     try {
       _prefs = await SharedPreferences.getInstance();

@@ -13,6 +13,9 @@ class PantallaMapa extends StatefulWidget {
 }
 
 class _PantallaMapaState extends State<PantallaMapa> {
+  /// Se recuerda mientras la app está abierta.
+  static bool _dos = false;
+
   final _scroll = ScrollController();
 
   @override
@@ -29,7 +32,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
   Future<void> _jugar(Nivel n) async {
     await Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => PantallaJuego(nivel: n)));
+        .push(MaterialPageRoute(
+            builder: (_) => PantallaJuego(nivel: n, dosJugadores: _dos)));
     if (mounted) setState(() {});
   }
 
@@ -59,6 +63,14 @@ class _PantallaMapaState extends State<PantallaMapa> {
                     '${Progreso.monedero}',
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(width: 12),
+                  FilterChip(
+                    avatar: Icon(_dos ? Icons.people_rounded : Icons.person_rounded),
+                    label: Text(_dos ? '2 jugadores' : '1 jugador'),
+                    selected: _dos,
+                    showCheckmark: false,
+                    onSelected: (v) => setState(() => _dos = v),
                   ),
                   const SizedBox(width: 12),
                   FilledButton.icon(

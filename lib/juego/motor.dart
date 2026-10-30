@@ -141,6 +141,24 @@ class Mandos {
 
 enum Estado { jugando, muerto, ganado }
 
+/// Un gato en el modo de dos jugadores. El motor trabaja siempre con el
+/// gato "activo" (paco, mandos, vidas...) y los va cambiando.
+class Jugador {
+  Cuerpo cuerpo = Cuerpo(0, 0, 0.8, 0.9);
+  Mandos mandos = Mandos();
+  int vidas = 3;
+  double invencible = 0;
+  int dir = 1;
+  double pasos = 0;
+  double coyote = 0;
+  double bufferSalto = 0;
+  bool saltoAntes = false;
+
+  /// Tiempo desde que se cayó; menor que 0 si está vivo.
+  double muerto = -1;
+  bool get vivo => muerto < 0;
+}
+
 /// Toda la lógica de un nivel en marcha.
 class Motor {
   final Nivel nivel;
@@ -149,7 +167,11 @@ class Motor {
   final List<Enemigo> enemigos = [];
   final List<Proyectil> proyectiles = [];
   JefeVivo? jefe;
-  final Mandos mandos = Mandos();
+  Mandos mandos = Mandos();
+
+  /// Modo de dos jugadores en el mismo teléfono (vacío si juega uno solo).
+  final List<Jugador> jugadores = [];
+  Jugador? _activo;
 
   Estado estado = Estado.jugando;
   int vidas = 3;
@@ -185,8 +207,9 @@ class Motor {
   /// Construye el mapa; los niveles del creador traen el suyo.
   final Mapa Function() _hacerMapa;
 
-  Motor(this.nivel, {Mapa Function()? crearMapa})
+  Motor(this.nivel, {Mapa Function()? crearMapa, bool dosJugadores = false})
       : _hacerMapa = crearMapa ?? (() => generarMapa(nivel)) {
+    if (dosJugadores) jugadores.addAll([Jugador(), Jugador()]);
     mapa = _hacerMapa();
     for (final col in mapa.casillas) {
       for (final c in col) {
@@ -205,6 +228,114 @@ class Motor {
     paco = Cuerpo(x, enAgua && !control ? mapa.inicioY : y, 0.8, 0.9);
     dirPaco = 1;
     camX = max(0, paco.x - anchoVista * 0.35);
+    // Con dos jugadores, el segundo sale justo detrás
+    for (final (i, j) in jugadores.indexed) {
+      j.cuerpo = Cuerpo(paco.x - i * 0.9, paco.y, 0.8, 0.9);
+      j.dir = 1;
+      j.vidas = 3;
+      j.invencible = 0;
+      j.muerto = -1;
+    }
+    if (jugadores.isNotEmpty) usar(jugadores.first);
+  }
+
+  // ------------------------------------------------------ dos jugadores
+  /// Pone a este gato como el activo (paco, mandos, vidas...).
+  void usar(Jugador j) {
+    _activo = j;
+    paco = j.cuerpo;
+    mandos = j.mandos;
+    vidas = j.vidas;
+    invencible = j.invencible;
+    dirPaco = j.dir;
+    pasos = j.pasos;
+    _coyote = j.coyote;
+    _bufferSalto = j.bufferSalto;
+    _saltoAntes = j.saltoAntes;
+  }
+
+  void _guardar(Jugador j) {
+    j.cuerpo = paco;
+    j.vidas = vidas;
+    j.invencible = invencible;
+    j.dir = dirPaco;
+    j.pasos = pasos;
+    j.coyote = _coyote;
+    j.bufferSalto = _bufferSalto;
+    j.saltoAntes = _saltoAntes;
+  }
+
+  void _pasoDosJugadores(double dt) {
+    final vivos = jugadores.where((j) => j.vivo).toList();
+    for (final j in jugadores) {
+      usar(j);
+      if (j.vivo) {
+        _actualizarPaco(dt);
+      } else {
+        // Se cae dando vueltas y vuelve junto al otro gato
+        j.muerto += dt;
+        paco.vy += 30 * dt;
+        paco.y += paco.vy * dt;
+        final otro = jugadores.firstWhere((o) => o != j);
+        if (j.muerto > 2 && otro.vivo && otro.cuerpo.y < Mapa.alto - 2) {
+          j.muerto = -1;
+          paco = Cuerpo(otro.cuerpo.x, max(0, otro.cuerpo.y - 2), 0.8, 0.9);
+          vidas = 3;
+          invencible = 2;
+        }
+      }
+      _guardar(j);
+      if (estado != Estado.jugando) return;
+    }
+    // Los enemigos persiguen al primer gato vivo; el otro solo choca con ellos
+    if (vivos.isEmpty) return;
+    usar(vivos.first);
+    _actualizarEnemigos(dt);
+    _actualizarJefe(dt);
+    _actualizarProyectiles(dt);
+    _guardar(vivos.first);
+    for (final j in vivos.skip(1)) {
+      if (!j.vivo) continue;
+      usar(j);
+      for (final e in enemigos) {
+        if (e.vivo && e.activo) _contacto(e);
+      }
+      final jf = jefe;
+      if (jf != null && jf.activo && jf.derrotado == 0) _contacto(jf);
+      for (final p in proyectiles) {
+        if (!p.fuera && p.espera <= 0) _proyectilToca(p);
+      }
+      proyectiles.removeWhere((p) => p.fuera);
+      _guardar(j);
+    }
+    _camaraDos();
+  }
+
+  /// La cámara mira entre los dos gatos y ninguno se puede salir de ella.
+  void _camaraDos() {
+    final vivos = jugadores.where((j) => j.vivo).toList();
+    if (vivos.isEmpty) return;
+    final medio = vivos.map((j) => j.cuerpo.centroX).reduce((a, b) => a + b) /
+        vivos.length;
+    final objetivo = medio - anchoVista * 0.45;
+    camX += (objetivo - camX) * 0.18;
+    camX = camX.clamp(0, max(0.0, mapa.ancho - anchoVista));
+    final arena = mapa.arenaX;
+    if (puertaCerrada && arena != null) {
+      camX = max(camX, min(arena - 1, mapa.ancho - anchoVista));
+    }
+    for (final j in vivos) {
+      final c = j.cuerpo;
+      if (c.x < camX) {
+        c.x = camX;
+        if (c.vx < 0) c.vx = 0;
+      }
+      if (c.x + c.w > camX + anchoVista) {
+        c.x = camX + anchoVista - c.w;
+        if (c.vx > 0) c.vx = 0;
+      }
+    }
+    if (_activo != null) usar(_activo!);
   }
 
   void _crearEnemigos() {
@@ -331,6 +462,10 @@ class Motor {
         return;
       case Estado.jugando:
         break;
+    }
+    if (jugadores.isNotEmpty) {
+      _pasoDosJugadores(dt);
+      return;
     }
     _actualizarPaco(dt);
     _actualizarEnemigos(dt);
@@ -874,6 +1009,23 @@ class Motor {
     }
   }
 
+  /// Un proyectil que toca a Paco le hace daño. Devuelve true si la bomba
+  /// tiene que explotar ya.
+  bool _proyectilToca(Proyectil p) {
+    if (!p.toca(paco)) return false;
+    if (p.tipo == TipoProyectil.bomba) {
+      p.dividir = 0.0001; // la bomba explota al tocar a Paco
+      return true;
+    }
+    if (p.mortal) {
+      if (invencible <= 0) _morir();
+    } else {
+      _herir(desdeX: p.centroX);
+    }
+    p.fuera = true;
+    return false;
+  }
+
   void _actualizarProyectiles(double dt) {
     final nuevos = <Proyectil>[];
     for (final p in proyectiles) {
@@ -925,18 +1077,7 @@ class Motor {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.giro += dt * 8;
-      if (p.toca(paco)) {
-        if (p.tipo == TipoProyectil.bomba) {
-          p.dividir = 0.0001; // la bomba explota al tocar a Paco
-          continue;
-        }
-        if (p.mortal) {
-          if (invencible <= 0) _morir();
-        } else {
-          _herir(desdeX: p.centroX);
-        }
-        p.fuera = true;
-      }
+      if (_proyectilToca(p)) continue;
       final cx = p.centroX.floor();
       final cy = p.abajo.floor();
       if (p.tipo == TipoProyectil.onda) {
@@ -984,6 +1125,16 @@ class Motor {
 
   void _morir() {
     if (estado != Estado.jugando) return;
+    final activo = _activo;
+    if (jugadores.isNotEmpty && activo != null) {
+      // Con dos jugadores solo se cae este gato; si se caen los dos, se
+      // vuelve a empezar desde la bandera
+      if (!activo.vivo) return;
+      activo.muerto = 0;
+      vidas = 0;
+      paco.vy = -12;
+      if (jugadores.any((j) => j.vivo)) return;
+    }
     estado = Estado.muerto;
     tiempoMuerto = 0;
     vidas = 0;

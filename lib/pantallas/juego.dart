@@ -16,7 +16,11 @@ class PantallaJuego extends StatefulWidget {
 
   /// Nivel hecho en el creador (no cuenta para el progreso).
   final NivelCreado? creado;
-  const PantallaJuego({super.key, required this.nivel, this.creado});
+
+  /// Dos gatos en el mismo teléfono, cada uno con sus botones.
+  final bool dosJugadores;
+  const PantallaJuego(
+      {super.key, required this.nivel, this.creado, this.dosJugadores = false});
 
   @override
   State<PantallaJuego> createState() => _PantallaJuegoState();
@@ -25,7 +29,8 @@ class PantallaJuego extends StatefulWidget {
 class _PantallaJuegoState extends State<PantallaJuego>
     with SingleTickerProviderStateMixin {
   late Nivel nivel = widget.nivel;
-  late Motor motor = Motor(nivel, crearMapa: widget.creado?.mapa);
+  late Motor motor = Motor(nivel,
+      crearMapa: widget.creado?.mapa, dosJugadores: widget.dosJugadores);
   late final Ticker _ticker;
   final _cuadro = ValueNotifier<int>(0);
   final _foco = FocusNode();
@@ -40,6 +45,8 @@ class _PantallaJuegoState extends State<PantallaJuego>
   // Teclado y botones táctiles se suman
   final Set<LogicalKeyboardKey> _teclas = {};
   bool _tIzq = false, _tDer = false, _tSalto = false;
+  // Botones del segundo jugador
+  bool _tIzq2 = false, _tDer2 = false, _tSalto2 = false;
 
   @override
   void initState() {
@@ -56,6 +63,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
     final pescadosAntes = motor.pescados;
     final estadoAntes = motor.estado;
     final jefeAntes = motor.jefe?.vidas;
+    final gatosAntes = _gatos();
     motor.actualizar(dt);
     _cuadro.value++;
     if (motor.derrotados.isNotEmpty) {
@@ -69,6 +77,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
         motor.pescados != pescadosAntes ||
         motor.estado != estadoAntes ||
         motor.jefe?.vidas != jefeAntes ||
+        _gatos() != gatosAntes ||
         motor.jefe?.activo == true && jefeAntes == null) {
       setState(() {});
     }
@@ -85,6 +94,10 @@ class _PantallaJuegoState extends State<PantallaJuego>
     }
   }
 
+  /// Vidas de los dos gatos, para saber si hay que redibujar los corazones.
+  String _gatos() =>
+      motor.jugadores.map((j) => j.vivo ? j.vidas : -1).join(',');
+
   void _avisarLogros(List<Logro> nuevos) {
     if (nuevos.isEmpty || !mounted) return;
     setState(() {
@@ -94,6 +107,19 @@ class _PantallaJuegoState extends State<PantallaJuego>
   }
 
   void _aplicarMandos() {
+    if (motor.jugadores.isNotEmpty) {
+      // Jugador 1: botones de la izquierda o A, D, W. Jugador 2: botones de
+      // la derecha o las flechas.
+      final m1 = motor.jugadores[0].mandos;
+      m1.izquierda = _tIzq || _teclas.contains(LogicalKeyboardKey.keyA);
+      m1.derecha = _tDer || _teclas.contains(LogicalKeyboardKey.keyD);
+      m1.salto = _tSalto || _teclas.contains(LogicalKeyboardKey.keyW);
+      final m2 = motor.jugadores[1].mandos;
+      m2.izquierda = _tIzq2 || _teclas.contains(LogicalKeyboardKey.arrowLeft);
+      m2.derecha = _tDer2 || _teclas.contains(LogicalKeyboardKey.arrowRight);
+      m2.salto = _tSalto2 || _teclas.contains(LogicalKeyboardKey.arrowUp);
+      return;
+    }
     final m = motor.mandos;
     m.izquierda = _tIzq ||
         _teclas.contains(LogicalKeyboardKey.arrowLeft) ||
@@ -123,7 +149,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
   void _cambiarNivel(Nivel n) {
     setState(() {
       nivel = n;
-      motor = Motor(n);
+      motor = Motor(n, dosJugadores: widget.dosJugadores);
       fin = false;
       pausa = false;
     });
@@ -187,12 +213,17 @@ class _PantallaJuegoState extends State<PantallaJuego>
         children: [
           Row(
             children: [
-              for (var i = 0; i < motor.vidas; i++)
-                const Padding(
-                  padding: EdgeInsets.only(right: 2),
-                  child: Icon(Icons.favorite_rounded,
-                      color: Color(0xFFFF4D6D), size: 26),
-                ),
+              if (motor.jugadores.isEmpty)
+                _corazones(motor.vidas)
+              else
+                for (final (i, j) in motor.jugadores.indexed) ...[
+                  RetratoPaco(
+                      tamano: 26,
+                      skin: i == 0 ? Progreso.skin : Progreso.skinSegundo),
+                  const SizedBox(width: 4),
+                  _corazones(j.vivo ? j.vidas : 0),
+                  const SizedBox(width: 10),
+                ],
               const SizedBox(width: 12),
               const Icon(Icons.set_meal_rounded,
                   color: Color(0xFFFFC93C), size: 24),
@@ -271,6 +302,18 @@ class _PantallaJuegoState extends State<PantallaJuego>
     );
   }
 
+  Widget _corazones(int n) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < n; i++)
+            const Padding(
+              padding: EdgeInsets.only(right: 2),
+              child: Icon(Icons.favorite_rounded,
+                  color: Color(0xFFFF4D6D), size: 24),
+            ),
+        ],
+      );
+
   Widget _texto(String t) => Text(
         t,
         style: TextStyle(
@@ -295,6 +338,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
       );
 
   Widget _controles() {
+    if (motor.jugadores.isNotEmpty) return _controlesDos();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       child: Align(
@@ -319,6 +363,45 @@ class _PantallaJuegoState extends State<PantallaJuego>
               alCambiar: (v) => _tSalto = v,
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Cada jugador tiene izquierda, derecha y salto en su mitad.
+  Widget _controlesDos() {
+    final salto = motor.enAgua ? Icons.waves_rounded : Icons.arrow_upward_rounded;
+    Widget juego(bool segundo) => Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            BotonTactil(
+              icono: Icons.arrow_back_rounded,
+              tamano: 62,
+              alCambiar: (v) => segundo ? _tIzq2 = v : _tIzq = v,
+            ),
+            const SizedBox(width: 8),
+            BotonTactil(
+              icono: Icons.arrow_forward_rounded,
+              tamano: 62,
+              alCambiar: (v) => segundo ? _tDer2 = v : _tDer = v,
+            ),
+            const SizedBox(width: 8),
+            BotonTactil(
+              icono: salto,
+              tamano: 72,
+              color: segundo ? Progreso.skinSegundo.cuerpo : Progreso.skin.cuerpo,
+              alCambiar: (v) => segundo ? _tSalto2 = v : _tSalto = v,
+            ),
+          ],
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [juego(false), const Spacer(), juego(true)],
         ),
       ),
     );
