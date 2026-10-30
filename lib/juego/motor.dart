@@ -185,6 +185,9 @@ class Motor {
 
   /// Enemigos pisados desde la última vez que la pantalla los contó.
   final List<TipoEnemigo> derrotados = [];
+
+  /// Efectos de sonido que tocan (la pantalla los toca y vacía la lista).
+  final List<String> sonidos = [];
   bool puertaCerrada = false;
 
   /// Paco entró en el portal del mundo secreto.
@@ -503,12 +506,16 @@ class Motor {
     if (agua) {
       p.vy += 11 * dt;
       if (p.vy > 3.5) p.vy = 3.5;
-      if (pulsado) p.vy = -6.8;
+      if (pulsado) {
+        p.vy = -6.8;
+        sonidos.add('nadar');
+      }
     } else {
       if (p.enSuelo) _coyote = 0.1;
       _coyote -= dt;
       if (_bufferSalto > 0 && _coyote > 0) {
         p.vy = -16.5;
+        sonidos.add('salto');
         _bufferSalto = 0;
         _coyote = 0;
       }
@@ -532,14 +539,17 @@ class Motor {
           case Casilla.moneda:
             mapa.poner(x, y, Casilla.vacio);
             pescados++;
+            sonidos.add('pescado');
           case Casilla.corazon:
             mapa.poner(x, y, Casilla.vacio);
             vidas = min(5, vidas + 1);
+            sonidos.add('corazon');
           case Casilla.liquido:
             if (p.y + p.h > y + 0.3) _morir();
           case Casilla.pinchos:
             if (p.y + p.h > y + 0.45) _herir(desdeX: x + 0.5);
           case Casilla.portal:
+            if (!secretoEncontrado) sonidos.add('portal');
             secretoEncontrado = true;
             _ganar();
           default:
@@ -549,7 +559,10 @@ class Motor {
     }
     if (p.y > Mapa.alto + 1) _morir();
 
-    if (!control && mapa.controlX > 0 && p.x >= mapa.controlX) control = true;
+    if (!control && mapa.controlX > 0 && p.x >= mapa.controlX) {
+      control = true;
+      sonidos.add('bandera');
+    }
 
     // Meta
     if (jefe == null && p.x + p.w >= mapa.metaX) {
@@ -668,6 +681,7 @@ class Motor {
             }
             e.vivo = false;
             e.aplastado = 1; // no deja cuerpo aplastado
+            sonidos.add('explosion');
             return true;
           }
           _contacto(e);
@@ -710,6 +724,7 @@ class Motor {
   }
 
   void _lanzaEnemigo(Enemigo e) {
+    sonidos.add('lanzar');
     final x = e.centroX + e.dir * 0.5 - 0.25;
     final y = e.y + 0.15;
     switch (e.tipo) {
@@ -750,6 +765,7 @@ class Motor {
             }
             e.vivo = false;
             e.aplastado = 1;
+            sonidos.add('explosion');
           } else {
             _contacto(e);
           }
@@ -790,6 +806,7 @@ class Motor {
       if (e is Enemigo) {
         e.vivo = false;
         derrotados.add(e.tipo);
+        sonidos.add('pisar');
       } else if (e is JefeVivo) {
         _golpearJefe(e);
       }
@@ -801,6 +818,7 @@ class Motor {
 
   void _golpearJefe(JefeVivo j) {
     if (j.invencible > 0) return;
+    sonidos.add('golpe_jefe');
     j.vidas--;
     j.invencible = 1.0;
     if (j.vidas <= 0) {
@@ -939,6 +957,7 @@ class Motor {
       if (j.lanzar > 0) j.lanzar -= dt;
       if (j.lanzar <= 0 && j.libre) {
         j.proximo = ataques[j.ataque % ataques.length];
+        sonidos.add('aviso');
         j.aviso = 0.8 - furia * 0.2;
       }
     }
@@ -955,6 +974,7 @@ class Motor {
   ];
 
   void _atacar(JefeVivo j, Habilidad h, int hacia, double furia) {
+    sonidos.add('lanzar');
     var tipo = j.datos.proyectil;
     if (j.datos.disfraz == Disfraz.supremo) {
       // El Perro Supremo usa los ataques de todos los jefes
@@ -1039,6 +1059,7 @@ class Motor {
           // El copo se rompe en 8 espinas de nieve; la burbuja de veneno
           // explota en gotas
           if (p.tipo == TipoProyectil.bomba) {
+            sonidos.add('explosion');
             for (var k = 0; k < 8; k++) {
               final a = k * pi / 4;
               nuevos.add(Proyectil(TipoProyectil.espina, p.centroX - 0.2,
@@ -1119,12 +1140,14 @@ class Motor {
       return;
     }
     invencible = 1.5;
+    sonidos.add('herido');
     paco.vy = -9;
     paco.vx = paco.centroX < desdeX ? -6 : 6;
   }
 
   void _morir() {
     if (estado != Estado.jugando) return;
+    if (_activo == null || _activo!.vivo) sonidos.add('morir');
     final activo = _activo;
     if (jugadores.isNotEmpty && activo != null) {
       // Con dos jugadores solo se cae este gato; si se caen los dos, se
@@ -1161,6 +1184,7 @@ class Motor {
 
   void _ganar() {
     if (estado != Estado.jugando) return;
+    if (!secretoEncontrado) sonidos.add('ganar');
     estado = Estado.ganado;
     tiempoGanado = 0;
   }

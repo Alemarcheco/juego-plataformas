@@ -9,6 +9,7 @@ import '../datos/skins.dart';
 import '../juego/motor.dart';
 import '../juego/pintor.dart';
 import '../progreso.dart';
+import '../sonido.dart';
 import 'comunes.dart';
 
 class PantallaJuego extends StatefulWidget {
@@ -52,6 +53,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
   void initState() {
     super.initState();
     _ticker = createTicker(_tick)..start();
+    _ponerMusica();
   }
 
   void _tick(Duration ahora) {
@@ -64,8 +66,14 @@ class _PantallaJuegoState extends State<PantallaJuego>
     final estadoAntes = motor.estado;
     final jefeAntes = motor.jefe?.vidas;
     final gatosAntes = _gatos();
+    final cerradaAntes = motor.puertaCerrada;
     motor.actualizar(dt);
     _cuadro.value++;
+    for (final s in motor.sonidos) {
+      Sonido.efecto(s);
+    }
+    motor.sonidos.clear();
+    if (motor.puertaCerrada != cerradaAntes) _ponerMusica();
     if (motor.derrotados.isNotEmpty) {
       for (final t in motor.derrotados) {
         Progreso.contarDerrota(t.name).then(_avisarLogros);
@@ -98,8 +106,15 @@ class _PantallaJuegoState extends State<PantallaJuego>
   String _gatos() =>
       motor.jugadores.map((j) => j.vivo ? j.vidas : -1).join(',');
 
+  /// La canción del nivel; en la pelea con el jefe, la del jefe.
+  void _ponerMusica() {
+    final jefe = motor.puertaCerrada && motor.jefe != null;
+    Sonido.musica(jefe ? 'jefe' : widget.creado?.musica ?? musicaDe(nivel));
+  }
+
   void _avisarLogros(List<Logro> nuevos) {
     if (nuevos.isEmpty || !mounted) return;
+    Sonido.efecto('logro');
     setState(() {
       _logro = nuevos.last;
       _logroCuadros = 60 * 4;
@@ -153,6 +168,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
       fin = false;
       pausa = false;
     });
+    _ponerMusica();
   }
 
   void _reiniciar() {
@@ -161,6 +177,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
       fin = false;
       pausa = false;
     });
+    _ponerMusica();
   }
 
   Nivel? get _siguiente {
@@ -173,6 +190,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
 
   @override
   void dispose() {
+    Sonido.musica('planicie');
     _ticker.dispose();
     _foco.dispose();
     _cuadro.dispose();
@@ -421,7 +439,9 @@ class _PantallaJuegoState extends State<PantallaJuego>
       children: [
         const Text('Pausa',
             style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 18),
+        const SizedBox(height: 8),
+        const InterruptoresSonido(),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 12,
           runSpacing: 12,

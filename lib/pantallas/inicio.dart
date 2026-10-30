@@ -96,6 +96,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12),
+                  const InterruptoresSonido(),
                 ],
               ),
             ),

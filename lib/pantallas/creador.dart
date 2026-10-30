@@ -283,10 +283,12 @@ class _PantallaEditorState extends State<PantallaEditor> {
   void initState() {
     super.initState();
     _rehacer();
+    Sonido.musica(n.musica);
   }
 
   @override
   void dispose() {
+    Sonido.musica('planicie');
     _guardado?.cancel();
     NivelesCreados.guardar();
     _repintar.dispose();
@@ -494,6 +496,7 @@ class _PantallaEditorState extends State<PantallaEditor> {
     );
     if (musica != null) {
       n.musica = musica;
+      Sonido.musica(musica);
       _cambio();
     }
   }
@@ -532,6 +535,7 @@ class _PantallaEditorState extends State<PantallaEditor> {
     if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => PantallaJuego(nivel: n.nivel, creado: n)));
+    Sonido.musica(n.musica);
   }
 
   @override

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../datos/skins.dart';
 import '../progreso.dart';
+import '../sonido.dart';
 
 /// Cara de Paco para los menús.
 class RetratoPaco extends StatelessWidget {
@@ -104,6 +105,50 @@ class _CaraPaco extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CaraPaco oldDelegate) => oldDelegate.skin != skin;
+}
+
+/// Botones para quitar o poner la música y los efectos.
+class InterruptoresSonido extends StatefulWidget {
+  const InterruptoresSonido({super.key});
+
+  @override
+  State<InterruptoresSonido> createState() => _InterruptoresSonidoState();
+}
+
+class _InterruptoresSonidoState extends State<InterruptoresSonido> {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FilterChip(
+          avatar: Icon(Sonido.musicaActiva
+              ? Icons.music_note_rounded
+              : Icons.music_off_rounded),
+          label: const Text('Música'),
+          selected: Sonido.musicaActiva,
+          showCheckmark: false,
+          onSelected: (v) async {
+            await Sonido.cambiarMusica(v);
+            if (mounted) setState(() {});
+          },
+        ),
+        const SizedBox(width: 10),
+        FilterChip(
+          avatar: Icon(Sonido.efectosActivos
+              ? Icons.volume_up_rounded
+              : Icons.volume_off_rounded),
+          label: const Text('Sonidos'),
+          selected: Sonido.efectosActivos,
+          showCheckmark: false,
+          onSelected: (v) async {
+            await Sonido.cambiarEfectos(v);
+            if (mounted) setState(() {});
+          },
+        ),
+      ],
+    );
+  }
 }
 
 /// Botón grande y redondeado de los menús.
