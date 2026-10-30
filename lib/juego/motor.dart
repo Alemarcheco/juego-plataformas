@@ -182,8 +182,12 @@ class Motor {
       nivel.tipo == TipoNivel.agua ||
       (nivel.arenaAcuatica && mapa.arenaX != null && paco.x > mapa.arenaX! - 1);
 
-  Motor(this.nivel) {
-    mapa = generarMapa(nivel);
+  /// Construye el mapa; los niveles del creador traen el suyo.
+  final Mapa Function() _hacerMapa;
+
+  Motor(this.nivel, {Mapa Function()? crearMapa})
+      : _hacerMapa = crearMapa ?? (() => generarMapa(nivel)) {
+    mapa = _hacerMapa();
     for (final col in mapa.casillas) {
       for (final c in col) {
         if (c == Casilla.moneda) totalPescados++;
@@ -195,7 +199,9 @@ class Motor {
 
   void _colocarPaco() {
     final x = control ? mapa.controlX : mapa.inicioX;
-    final y = control ? mapa.suelo(mapa.controlX.floor()) - 1.0 : mapa.inicioY;
+    final y = control
+        ? (mapa.controlY ?? mapa.suelo(mapa.controlX.floor())) - 1.0
+        : mapa.inicioY;
     paco = Cuerpo(x, enAgua && !control ? mapa.inicioY : y, 0.8, 0.9);
     dirPaco = 1;
     camX = max(0, paco.x - anchoVista * 0.35);
@@ -1013,7 +1019,7 @@ class Motor {
 
   /// Reiniciar el nivel desde el principio.
   void reiniciar() {
-    mapa = generarMapa(nivel);
+    mapa = _hacerMapa();
     pescados = 0;
     control = false;
     puertaCerrada = false;

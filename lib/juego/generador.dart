@@ -71,6 +71,11 @@ class Mapa {
   double metaX = 0;
   double controlX = 0;
 
+  /// En los niveles del creador las banderas van donde se pusieron
+  /// (fila de la casilla donde se apoyan); si no, sobre el suelo.
+  int? metaY;
+  int? controlY;
+
   /// Para niveles con jefe: dónde empieza la arena.
   double? arenaX;
   double sueloArena = 0;

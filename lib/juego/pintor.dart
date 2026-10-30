@@ -496,7 +496,7 @@ class PintorJuego extends CustomPainter {
       ..strokeWidth = s * 0.12;
     if (m.controlX > 0) {
       final x = m.controlX * s + s * 0.5;
-      final suelo = m.suelo(m.controlX.floor()) * s;
+      final suelo = (m.controlY ?? m.suelo(m.controlX.floor())) * s;
       c.drawLine(Offset(x, suelo), Offset(x, suelo - s * 2.2), palo);
       final color = motor.control ? const Color(0xFF4CD964) : const Color(0xFFB0B0B0);
       final ondea = sin(motor.t * 5) * s * 0.1;
@@ -509,7 +509,7 @@ class PintorJuego extends CustomPainter {
     }
     if (motor.jefe == null) {
       final x = m.metaX * s + s * 0.5;
-      final suelo = m.suelo(m.metaX.floor()) * s;
+      final suelo = (m.metaY ?? m.suelo(m.metaX.floor())) * s;
       c.drawLine(Offset(x, suelo), Offset(x, suelo - s * 6), palo);
       c.drawCircle(Offset(x, suelo - s * 6), s * 0.22, Paint()..color = const Color(0xFFFFC93C));
       final ondea = sin(motor.t * 5) * s * 0.15;

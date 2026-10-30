@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../datos/creados.dart';
 import '../datos/logros.dart';
 import '../datos/mundos.dart';
 import '../datos/skins.dart';
@@ -12,7 +13,10 @@ import 'comunes.dart';
 
 class PantallaJuego extends StatefulWidget {
   final Nivel nivel;
-  const PantallaJuego({super.key, required this.nivel});
+
+  /// Nivel hecho en el creador (no cuenta para el progreso).
+  final NivelCreado? creado;
+  const PantallaJuego({super.key, required this.nivel, this.creado});
 
   @override
   State<PantallaJuego> createState() => _PantallaJuegoState();
@@ -21,7 +25,7 @@ class PantallaJuego extends StatefulWidget {
 class _PantallaJuegoState extends State<PantallaJuego>
     with SingleTickerProviderStateMixin {
   late Nivel nivel = widget.nivel;
-  late Motor motor = Motor(nivel);
+  late Motor motor = Motor(nivel, crearMapa: widget.creado?.mapa);
   late final Ticker _ticker;
   final _cuadro = ValueNotifier<int>(0);
   final _foco = FocusNode();
@@ -68,7 +72,10 @@ class _PantallaJuegoState extends State<PantallaJuego>
         motor.jefe?.activo == true && jefeAntes == null) {
       setState(() {});
     }
-    if (motor.terminado && !fin) {
+    if (motor.terminado && !fin && widget.creado != null) {
+      fin = true;
+      setState(() {});
+    } else if (motor.terminado && !fin) {
       fin = true;
       Progreso.completar(nivel.indice, motor.pescados)
           .then((_) => Progreso.revisarLogros())
@@ -131,6 +138,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
   }
 
   Nivel? get _siguiente {
+    if (widget.creado != null) return null;
     if (motor.secretoEncontrado) return mundoSecreto.niveles.first;
     final i = nivel.indice + 1;
     if (nivel.indice == 79 || i >= todosLosNiveles.length) return null;
@@ -191,7 +199,8 @@ class _PantallaJuegoState extends State<PantallaJuego>
               const SizedBox(width: 4),
               _texto('${motor.pescados}'),
               const Spacer(),
-              _texto('Mundo ${nivel.mundo}-${nivel.numero} · ${nivel.tema.nombre}'),
+              _texto(nivel.creado ??
+                  'Mundo ${nivel.mundo}-${nivel.numero} · ${nivel.tema.nombre}'),
               const SizedBox(width: 8),
               _botonRedondo(Icons.pause_rounded, () {
                 setState(() => pausa = true);

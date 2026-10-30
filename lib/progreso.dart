@@ -19,6 +19,10 @@ class Progreso {
   /// Se encontró el camino secreto del nivel 9-5.
   static bool secreto = false;
 
+  /// El creador de niveles se compra en la tienda.
+  static const precioCreador = 100;
+  static bool creador = false;
+
   /// Enemigos derrotados por tipo (para los logros).
   static final Map<String, int> derrotados = {};
   static final Set<String> logrados = {};
@@ -62,6 +66,7 @@ class Progreso {
         derrotados[k] = _prefs!.getInt('derrotados_$k') ?? 0;
       }
       logrados.addAll(_prefs!.getStringList('logros') ?? const []);
+      creador = _prefs!.getBool('creador') ?? false;
     } catch (_) {
       // Sin almacenamiento se juega igual, solo que no se guarda.
     }
@@ -125,6 +130,18 @@ class Progreso {
     comprados.add(s.id);
     skinActual = s.id;
     await _guardarTienda();
+    return true;
+  }
+
+  static Future<bool> comprarCreador() async {
+    if (creador) return true;
+    if (monedero < precioCreador) return false;
+    monedero -= precioCreador;
+    creador = true;
+    try {
+      await _prefs?.setBool('creador', true);
+      await _prefs?.setInt('monedero', monedero);
+    } catch (_) {}
     return true;
   }
 

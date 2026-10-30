@@ -4,6 +4,7 @@ import '../datos/logros.dart';
 import '../datos/skins.dart';
 import '../progreso.dart';
 import 'comunes.dart';
+import 'creador.dart';
 
 /// Tienda de trajes: se pagan con los pescados de los niveles.
 class PantallaTienda extends StatefulWidget {
@@ -58,12 +59,59 @@ class _PantallaTiendaState extends State<PantallaTienda> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(16),
                 children: [
+                  _tarjetaCreador(),
                   for (final s in skins) _tarjeta(s),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _tarjetaCreador() {
+    final tiene = Progreso.creador;
+    return Container(
+      width: 170,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F3A2C),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF3FAE5A), width: 3),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Icon(Icons.construction_rounded, size: 80, color: Color(0xFF8BE08A)),
+          const Text('Creador de niveles',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          if (tiene)
+            FilledButton(
+              onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const PantallaCreador())),
+              child: const Text('Abrir'),
+            )
+          else
+            FilledButton(
+              onPressed: Progreso.monedero >= Progreso.precioCreador
+                  ? () async {
+                      await pedirCreador(context);
+                      if (mounted) setState(() {});
+                    }
+                  : null,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.set_meal_rounded, size: 18),
+                  const SizedBox(width: 4),
+                  Text('${Progreso.precioCreador}'),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -48,6 +48,37 @@ class Tema {
 }
 
 class Temas {
+  /// Todos los fondos, para elegir en el creador de niveles.
+  static const Map<String, Tema> todos = {
+    'planicie': planicie,
+    'cielo': cielo,
+    'bosque': bosque,
+    'castillo': castillo,
+    'desierto': desierto,
+    'piramide': piramide,
+    'playa': playa,
+    'barco': barco,
+    'marino': marino,
+    'submarino': submarino,
+    'castilloCielo': castilloCielo,
+    'nieve': nieve,
+    'iglu': iglu,
+    'ciudad': ciudad,
+    'fabrica': fabrica,
+    'lava': lava,
+    'volcan': volcan,
+    'fortalezaLava': fortalezaLava,
+    'veneno': veneno,
+    'laboratorio': laboratorio,
+    'caja': caja,
+    'cajaAgua': cajaAgua,
+    'plataformaVoladora': plataformaVoladora,
+    'gigante': gigante,
+    'charcoGigante': charcoGigante,
+    'abandonado': abandonado,
+    'castilloFinal': castilloFinal,
+  };
+
   static const planicie = Tema(
     nombre: 'Planicie',
     cieloArriba: Color(0xFF6EC6FF),
@@ -419,11 +450,15 @@ class Nivel {
   /// Yendo hacia atrás al empezar se llega al mundo secreto.
   final bool caminoSecreto;
 
+  /// Nombre de un nivel hecho en el creador de niveles (si no, null).
+  final String? creado;
+
   const Nivel(this.mundo, this.numero, this.tipo, this.tema,
       {this.jefe,
       this.fuego = false,
       this.arenaAcuatica = false,
-      this.caminoSecreto = false});
+      this.caminoSecreto = false,
+      this.creado});
 
   bool get esSecreto => mundo == 11;
 
