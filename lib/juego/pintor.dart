@@ -390,9 +390,17 @@ class PintorJuego extends CustomPainter {
     final oro = Paint()..color = const Color(0xFFFFC93C);
     final oroOscuro = Paint()..color = const Color(0xFFE09A1A);
 
+    // Mientras Paco no entra, el pasillo secreto (pescados y portal incluidos)
+    // se ve como tierra normal
+    final secreto = motor.nivel.caminoSecreto;
+    final dentro = motor.paco.x < anchoSecreto + 0.5;
     for (var x = x0; x <= x1; x++) {
       for (var y = 0; y < Mapa.alto; y++) {
-        final cas = m.casillas[x][y];
+        var cas = m.casillas[x][y];
+        if (secreto && x < anchoSecreto && cas != Casilla.vacio &&
+            !esSolida(cas) && !dentro) {
+          cas = Casilla.falso;
+        }
         if (cas == Casilla.vacio) continue;
         final r = Rect.fromLTWH(x * s, y * s, s + 0.6, s + 0.6);
         switch (cas) {
@@ -439,7 +447,6 @@ class PintorJuego extends CustomPainter {
             _corazon(c, r.center, s * 0.35 * late, Paint()..color = const Color(0xFFFF4D6D));
           case Casilla.falso:
             // Pared falsa: se ve como tierra, pero se aclara al entrar
-            final dentro = motor.paco.x < anchoSecreto + 0.5;
             c.drawRect(r, Paint()..color = tema.tierra.withValues(alpha: dentro ? 0.3 : 1));
             if (!dentro && (x * 7 + y * 3) % 5 == 0) {
               c.drawCircle(r.center + Offset(s * 0.15, s * 0.1), s * 0.1, manchas);
@@ -716,7 +723,7 @@ class PintorJuego extends CustomPainter {
     // Aviso antes de lanzar: brilla del color de lo que va a lanzar
     final aviso = e.aviso > 0 && e.vivo
         ? switch (e.tipo) {
-            TipoEnemigo.hielo => const Color(0xFF7FE0FF),
+            TipoEnemigo.hielo || TipoEnemigo.pezHielo => const Color(0xFF7FE0FF),
             TipoEnemigo.llamas => const Color(0xFFFF7A1A),
             TipoEnemigo.acido => const Color(0xFF8BE03A),
             _ => const Color(0xFFFF3B3B),
@@ -786,21 +793,51 @@ class PintorJuego extends CustomPainter {
         _perro(c, s * 0.9, const Color(0xFFD9C27A), paso: 0);
         _alaPerro(c, s * 1.15, hombro, 0.55 + aleteo * 0.85, Colors.white);
       case TipoEnemigo.pez:
-        final cuerpo = Paint()..color = const Color(0xFFFF8A65);
-        final aleta = Paint()..color = const Color(0xFFE0603A);
-        c.drawOval(Rect.fromCenter(center: Offset(0, -s * 0.33), width: s * 0.95, height: s * 0.6), cuerpo);
+        _pez(c, s, e, const Color(0xFFFF8A65), const Color(0xFFE0603A));
+      case TipoEnemigo.pezHielo:
+        _pez(c, s, e, const Color(0xFF8FD8F5), const Color(0xFF3FA4D8));
+        // Cresta de hielo
+        for (var k = 0; k < 3; k++) {
+          final x = -s * 0.15 + k * s * 0.15;
+          c.drawPath(
+              Path()
+                ..moveTo(x - s * 0.06, -s * 0.6)
+                ..lineTo(x, -s * 0.82)
+                ..lineTo(x + s * 0.06, -s * 0.6)
+                ..close(),
+              Paint()..color = const Color(0xFFE8FAFF));
+        }
+      case TipoEnemigo.pezMorado:
+        _pez(c, s, e, const Color(0xFF9B5DE5), const Color(0xFF6A2FB0), enfadado: true);
+      case TipoEnemigo.pezGlobo:
+        // Redondo con púas; se hincha y parpadea antes de explotar
+        final infla = e.inflar > 0 ? 1 + e.inflar * 0.7 : 1.0;
+        final destello = e.inflar > 0 && (e.inflar * 14).floor().isEven;
+        final r = s * 0.34 * infla;
+        final centro = Offset(0, -s * 0.36);
+        final puas = Paint()..color = const Color(0xFF8A6A2A);
+        for (var k = 0; k < 10; k++) {
+          final a = k * pi / 5;
+          final dir = Offset(cos(a), sin(a));
+          c.drawPath(
+              Path()
+                ..moveTo(centro.dx + dir.dx * r * 0.9 - dir.dy * r * 0.15, centro.dy + dir.dy * r * 0.9 + dir.dx * r * 0.15)
+                ..lineTo(centro.dx + dir.dx * r * 1.35, centro.dy + dir.dy * r * 1.35)
+                ..lineTo(centro.dx + dir.dx * r * 0.9 + dir.dy * r * 0.15, centro.dy + dir.dy * r * 0.9 - dir.dx * r * 0.15)
+                ..close(),
+              puas);
+        }
         final cola = Path()
-          ..moveTo(-s * 0.4, -s * 0.33)
-          ..lineTo(-s * 0.7, -s * 0.6 + sin(e.t * 8) * s * 0.05)
-          ..lineTo(-s * 0.7, -s * 0.06 - sin(e.t * 8) * s * 0.05)
+          ..moveTo(-r * 0.9, centro.dy)
+          ..lineTo(-r * 1.4, centro.dy - r * 0.45)
+          ..lineTo(-r * 1.4, centro.dy + r * 0.45)
           ..close();
-        c.drawPath(cola, aleta);
-        c.drawOval(Rect.fromCenter(center: Offset(s * 0.12, -s * 0.48), width: s * 0.14, height: s * 0.3), aleta);
-        c.drawCircle(Offset(s * 0.25, -s * 0.4), s * 0.06, Paint()..color = Colors.black);
-        c.drawLine(Offset(s * 0.18, -s * 0.52), Offset(s * 0.32, -s * 0.48),
-            Paint()
-              ..color = Colors.black
-              ..strokeWidth = s * 0.04);
+        c.drawPath(cola, Paint()..color = const Color(0xFFE0B040));
+        c.drawCircle(centro, r, Paint()..color = destello ? const Color(0xFFFF6B6B) : const Color(0xFFF5D06A));
+        c.drawOval(Rect.fromCenter(center: centro + Offset(0, r * 0.4), width: r * 1.3, height: r * 0.8),
+            Paint()..color = const Color(0xFFFFF1C4));
+        c.drawCircle(centro + Offset(r * 0.45, -r * 0.2), r * 0.16, Paint()..color = Colors.black);
+        c.drawCircle(centro + Offset(r * 0.85, r * 0.15), r * 0.1, Paint()..color = const Color(0xFF8A4A2A));
       case TipoEnemigo.fuego:
         final r = s * 0.38;
         c.drawCircle(Offset(0, -r), r * 1.25, Paint()..color = const Color(0x66FF7A1A));
@@ -814,6 +851,40 @@ class PintorJuego extends CustomPainter {
       c.restore();
     }
     c.restore();
+  }
+
+  /// Pez que nada; el morado tiene cara de enfadado y dientes.
+  void _pez(Canvas c, double s, Enemigo e, Color color, Color oscuro, {bool enfadado = false}) {
+    final cuerpo = Paint()..color = color;
+    final aleta = Paint()..color = oscuro;
+    c.drawOval(Rect.fromCenter(center: Offset(0, -s * 0.33), width: s * 0.95, height: s * 0.6), cuerpo);
+    final cola = Path()
+      ..moveTo(-s * 0.4, -s * 0.33)
+      ..lineTo(-s * 0.7, -s * 0.6 + sin(e.t * 8) * s * 0.05)
+      ..lineTo(-s * 0.7, -s * 0.06 - sin(e.t * 8) * s * 0.05)
+      ..close();
+    c.drawPath(cola, aleta);
+    c.drawOval(Rect.fromCenter(center: Offset(s * 0.12, -s * 0.48), width: s * 0.14, height: s * 0.3), aleta);
+    c.drawCircle(Offset(s * 0.25, -s * 0.4), s * 0.06, Paint()..color = enfadado ? const Color(0xFFFFE14A) : Colors.black);
+    final ceja = Paint()
+      ..color = Colors.black
+      ..strokeWidth = s * 0.04;
+    if (enfadado) {
+      c.drawLine(Offset(s * 0.15, -s * 0.54), Offset(s * 0.33, -s * 0.44), ceja);
+      final dientes = Paint()..color = Colors.white;
+      for (var k = 0; k < 3; k++) {
+        final x = s * 0.22 + k * s * 0.07;
+        c.drawPath(
+            Path()
+              ..moveTo(x, -s * 0.24)
+              ..lineTo(x + s * 0.035, -s * 0.16)
+              ..lineTo(x + s * 0.07, -s * 0.24)
+              ..close(),
+            dientes);
+      }
+    } else {
+      c.drawLine(Offset(s * 0.18, -s * 0.52), Offset(s * 0.32, -s * 0.48), ceja);
+    }
   }
 
   /// Perro robot: cuerpo metálico, antena y un lanzabombas en la espalda.

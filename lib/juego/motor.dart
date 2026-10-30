@@ -40,7 +40,10 @@ class Enemigo extends Cuerpo {
         baseY = y,
         super(x, y, w, h);
 
-  bool get pisable => tipo != TipoEnemigo.fuego && tipo != TipoEnemigo.espinoso;
+  bool get pisable =>
+      tipo != TipoEnemigo.fuego &&
+      tipo != TipoEnemigo.espinoso &&
+      tipo != TipoEnemigo.pezGlobo;
 
   bool get camina => const {
         TipoEnemigo.perro,
@@ -210,6 +213,9 @@ class Motor {
         case TipoEnemigo.volador:
           enemigos.add(Enemigo(a.tipo, a.x, a.y, 0.9, 0.7, fase));
         case TipoEnemigo.pez:
+        case TipoEnemigo.pezGlobo:
+        case TipoEnemigo.pezHielo:
+        case TipoEnemigo.pezMorado:
           enemigos.add(Enemigo(a.tipo, a.x, a.y, 0.95, 0.65, fase));
         case TipoEnemigo.fuego:
           enemigos.add(Enemigo(a.tipo, a.x, a.y, 0.75, 0.75, fase));
@@ -453,10 +459,27 @@ class Motor {
           e.x = nx;
           e.y = e.baseY + sin(e.t * 2.2) * 0.9;
         case TipoEnemigo.pez:
+        case TipoEnemigo.pezGlobo:
+        case TipoEnemigo.pezHielo:
+          if (_atacaPez(e, dt)) continue;
           final nx = e.baseX + sin(e.t * 0.6) * 3;
           e.dir = nx >= e.x ? 1 : -1;
           e.x = nx;
           e.y = e.baseY + sin(e.t * 1.5) * 0.6;
+        case TipoEnemigo.pezMorado:
+          // Persigue a Paco cuando lo ve, si no da vueltas
+          final dx = p.centroX - e.centroX;
+          final dy = (p.y + p.h / 2) - (e.y + e.h / 2);
+          final dist = sqrt(dx * dx + dy * dy);
+          if (dist < 9 && dist > 0.01) {
+            e.vx = dx / dist * 2.3;
+            e.vy = dy / dist * 2.3;
+          } else {
+            e.vx = cos(e.t * 0.6) * 1.2;
+            e.vy = sin(e.t * 1.5) * 0.6;
+          }
+          if (e.vx.abs() > 0.05) e.dir = e.vx > 0 ? 1 : -1;
+          mover(e, dt);
         case TipoEnemigo.fuego:
           const periodo = 2.8;
           final fase = (e.t % periodo) / periodo;
@@ -553,6 +576,52 @@ class Motor {
       default:
         break;
     }
+  }
+
+  /// Ataques de los peces especiales. Devuelve true si el pez ya no sigue.
+  bool _atacaPez(Enemigo e, double dt) {
+    final dx = paco.centroX - e.centroX;
+    final dy = (paco.y + paco.h / 2) - (e.y + e.h / 2);
+    switch (e.tipo) {
+      case TipoEnemigo.pezGlobo:
+        if (e.inflar > 0) {
+          e.inflar += dt;
+          if (e.inflar > 0.8) {
+            for (var k = 0; k < 8; k++) {
+              final a = k * pi / 4;
+              proyectiles.add(Proyectil(TipoProyectil.espina, e.centroX - 0.2,
+                  e.y + e.h / 2 - 0.2, 0.4, 0.4,
+                  vx: cos(a) * 5, vy: sin(a) * 5, vida: 0.7));
+            }
+            e.vivo = false;
+            e.aplastado = 1;
+          } else {
+            _contacto(e);
+          }
+          return true;
+        }
+        if (dx.abs() < 2.4 && dy.abs() < 2.4) e.inflar = 0.001;
+      case TipoEnemigo.pezHielo:
+        if (e.aviso > 0) {
+          e.aviso -= dt;
+          e.dir = dx > 0 ? 1 : -1;
+          if (e.aviso <= 0) {
+            proyectiles.add(Proyectil(TipoProyectil.espinaNieve,
+                e.centroX + e.dir * 0.5 - 0.22, e.y + e.h / 2 - 0.17, 0.45, 0.35,
+                vx: e.dir * 5.5));
+          }
+          _contacto(e);
+          return true;
+        }
+        e.disparo -= dt;
+        if (e.disparo <= 0 && dx.abs() < 9 && dy.abs() < 1.5) {
+          e.disparo = 2.6;
+          e.aviso = 0.7;
+        }
+      default:
+        break;
+    }
+    return false;
   }
 
   /// Paco toca a un enemigo: o lo pisa o se hace daño.
