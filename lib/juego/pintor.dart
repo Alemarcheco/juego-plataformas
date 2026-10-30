@@ -804,6 +804,21 @@ class PintorJuego extends CustomPainter {
     }
     c.scale(j.dir.toDouble(), 1);
     final u = s * 2 * j.datos.tamano;
+    // Aviso: brilla del color del ataque que va a hacer
+    final aviso = j.modo == ModoJefe.preparando
+        ? const Color(0xFFFF2D2D)
+        : j.aviso > 0
+            ? _colorAviso(j.proximo)
+            : null;
+    final pulso = 0.55 + sin(motor.t * 18) * 0.25;
+    if (aviso != null) {
+      c.drawOval(
+          Rect.fromCenter(center: Offset(0, -u * 0.4), width: u * 1.5, height: u * 1.1),
+          Paint()
+            ..color = aviso.withValues(alpha: pulso * 0.7)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, u * 0.12));
+      c.saveLayer(null, Paint());
+    }
     final d = j.datos;
     final vuela = d.sabe(Habilidad.volar);
     if (d.sabe(Habilidad.jetpack)) _jetpack(c, u);
@@ -855,8 +870,21 @@ class PintorJuego extends CustomPainter {
         c.drawCircle(Offset(-u * 0.5, -u * 0.4 - f * u * 0.8), u * (0.03 + k * 0.01), b);
       }
     }
+    if (aviso != null) {
+      c.drawPaint(Paint()
+        ..color = aviso.withValues(alpha: pulso * 0.6)
+        ..blendMode = BlendMode.srcATop);
+      c.restore();
+    }
     c.restore();
   }
+
+  Color _colorAviso(Habilidad? h) => switch (h) {
+        Habilidad.disparar => const Color(0xFFFF3B3B),
+        Habilidad.lluvia => const Color(0xFFB45CFF),
+        Habilidad.erupcion => const Color(0xFFFFB020),
+        _ => const Color(0xFFFFF04A),
+      };
 
   void _jetpack(Canvas c, double u) {
     final metal = Paint()..color = const Color(0xFF8C96A8);

@@ -68,6 +68,16 @@ class JefeVivo extends Cuerpo {
   bool enAire = false;
   int ataque = 0;
 
+  /// Aviso antes de un ataque a distancia: el jefe brilla del color del
+  /// ataque que viene ([proximo]) y luego ataca.
+  double aviso = 0;
+  Habilidad? proximo;
+
+  /// Descanso después de cualquier ataque: nunca hace dos a la vez.
+  double calma = 0;
+
+  bool get libre => aviso <= 0 && calma <= 0 && modo == ModoJefe.normal;
+
   /// Jefes con jetpack que también caminan (el Perro Supremo) alternan
   /// entre andar y volar.
   bool faseVuelo = false;
@@ -552,6 +562,7 @@ class Motor {
     }
     if (!j.activo) return;
     if (j.invencible > 0) j.invencible -= dt;
+    if (j.calma > 0) j.calma -= dt;
     j.t += dt;
     final d = j.datos;
     final furia = 1 - j.vidas / d.vidas; // 0 al principio, ~1 al final
@@ -578,8 +589,10 @@ class Motor {
       mover(j, dt);
       if (d.sabe(Habilidad.jetpack)) {
         j.soltar -= dt;
-        if (j.soltar <= 0) {
-          j.soltar = 1.1 - furia * 0.4;
+        // No suelta fuego si está avisando o va a tocarle otro ataque
+        if (j.soltar <= 0 && j.libre && j.lanzar > 0.6) {
+          j.soltar = 1.4 - furia * 0.4;
+          j.calma = 0.6;
           proyectiles.add(Proyectil(TipoProyectil.fuego,
               j.centroX - j.dir * 0.7 - 0.25, j.abajo - 0.2, 0.5, 0.5,
               vy: 1.2));
@@ -601,7 +614,7 @@ class Motor {
           }
           if (d.sabe(Habilidad.embestir) && j.enSuelo) {
             j.cargar -= dt;
-            if (j.cargar <= 0) {
+            if (j.cargar <= 0 && j.libre) {
               j.modo = ModoJefe.preparando;
               j.tiempoModo = 0.8;
               j.dir = haciaPaco;
@@ -626,6 +639,7 @@ class Motor {
           j.tiempoModo -= dt;
           if (j.tiempoModo <= 0) {
             j.modo = ModoJefe.normal;
+            j.calma = 1.0;
             j.cargar = 3.5 - furia * 1.5;
             j.dir = haciaPaco;
           }
@@ -636,7 +650,8 @@ class Motor {
       mover(j, dt);
       if (j.chocoPared && j.modo == ModoJefe.normal) j.dir = -j.dir;
       // Al caer de un salto, onda por el suelo
-      if (j.enAire && j.enSuelo && d.sabe(Habilidad.onda)) {
+      if (j.enAire && j.enSuelo && d.sabe(Habilidad.onda) && j.libre) {
+        j.calma = 0.8;
         for (final lado in [-1.0, 1.0]) {
           proyectiles.add(Proyectil(TipoProyectil.onda,
               j.centroX - 0.4 + lado * 0.9, mapa.sueloArena - 0.6, 0.8, 0.6,
@@ -653,12 +668,20 @@ class Motor {
       if (d.sabe(Habilidad.lluvia)) Habilidad.lluvia,
       if (d.sabe(Habilidad.erupcion)) Habilidad.erupcion,
     ];
-    if (ataques.isNotEmpty && j.modo == ModoJefe.normal) {
-      j.lanzar -= dt;
-      if (j.lanzar <= 0) {
-        j.lanzar = 2.4 - furia * 0.9;
-        _atacar(j, ataques[j.ataque % ataques.length], haciaPaco, furia);
+    if (j.aviso > 0) {
+      j.aviso -= dt;
+      if (j.aviso <= 0) {
+        _atacar(j, j.proximo!, paco.centroX > j.centroX ? 1 : -1, furia);
         j.ataque++;
+        j.proximo = null;
+        j.lanzar = 3.2 - furia * 0.9;
+        j.calma = 1.0;
+      }
+    } else if (ataques.isNotEmpty && j.modo == ModoJefe.normal) {
+      if (j.lanzar > 0) j.lanzar -= dt;
+      if (j.lanzar <= 0 && j.libre) {
+        j.proximo = ataques[j.ataque % ataques.length];
+        j.aviso = 0.8 - furia * 0.2;
       }
     }
     if (estado == Estado.jugando) _contacto(j);
