@@ -382,6 +382,7 @@ enum TipoProyectil {
   copo,
   espinaNieve,
   onda,
+  bomba,
 }
 
 class Jefe {

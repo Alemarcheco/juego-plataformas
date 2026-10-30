@@ -713,6 +713,23 @@ class PintorJuego extends CustomPainter {
       c.scale(1, 0.35);
     }
     c.scale(e.dir.toDouble(), 1);
+    // Aviso antes de lanzar: brilla del color de lo que va a lanzar
+    final aviso = e.aviso > 0 && e.vivo
+        ? switch (e.tipo) {
+            TipoEnemigo.hielo => const Color(0xFF7FE0FF),
+            TipoEnemigo.llamas => const Color(0xFFFF7A1A),
+            TipoEnemigo.acido => const Color(0xFF8BE03A),
+            _ => const Color(0xFFFF3B3B),
+          }
+        : null;
+    final pulso = 0.55 + sin(motor.t * 22) * 0.25;
+    if (aviso != null) {
+      c.drawCircle(Offset(0, -s * 0.5), s * 0.75,
+          Paint()
+            ..color = aviso.withValues(alpha: pulso * 0.7)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.15));
+      c.saveLayer(null, Paint());
+    }
     switch (e.tipo) {
       case TipoEnemigo.perro:
         _perro(c, s, const Color(0xFFA0703F), paso: e.t * 10);
@@ -746,7 +763,7 @@ class PintorJuego extends CustomPainter {
         final infla = e.inflar > 0 ? 1 + e.inflar * 0.6 : 1.0;
         c.scale(infla, infla);
         final destello = e.inflar > 0 && (e.inflar * 12).floor().isEven;
-        final espina = Paint()..color = const Color(0xFF4A3A6A);
+        final espina = Paint()..color = const Color(0xFFF2A33A);
         for (var k = 0; k < 5; k++) {
           final x = -s * 0.4 + k * s * 0.17;
           c.drawPath(
@@ -757,7 +774,9 @@ class PintorJuego extends CustomPainter {
                 ..close(),
               espina);
         }
-        _perro(c, s, destello ? const Color(0xFFFF6B6B) : const Color(0xFF8A6AB0), paso: e.t * 8);
+        _perro(c, s, destello ? const Color(0xFFFF6B6B) : const Color(0xFF2FA89A), paso: e.t * 8);
+      case TipoEnemigo.robot:
+        _perroRobot(c, s, e);
       case TipoEnemigo.volador:
         // Las alas giran desde el hombro: el ala de atrás va detrás del perro
         final aleteo = sin(e.t * 14);
@@ -788,7 +807,44 @@ class PintorJuego extends CustomPainter {
         c.drawCircle(Offset(0, -r), r, Paint()..color = const Color(0xFFFF6A1A));
         c.drawCircle(Offset(0, -r * 1.1), r * 0.6, Paint()..color = const Color(0xFFFFD23F));
     }
+    if (aviso != null) {
+      c.drawPaint(Paint()
+        ..color = aviso.withValues(alpha: pulso * 0.55)
+        ..blendMode = BlendMode.srcATop);
+      c.restore();
+    }
     c.restore();
+  }
+
+  /// Perro robot: cuerpo metálico, antena y un lanzabombas en la espalda.
+  void _perroRobot(Canvas c, double s, Enemigo e) {
+    final metal = Paint()..color = const Color(0xFF9AA6B8);
+    final oscuro = Paint()..color = const Color(0xFF5C6678);
+    final pata = sin(e.t * 8) * 0.08;
+    for (final k in [-1.0, 1.0]) {
+      c.drawRect(Rect.fromLTWH(-s * 0.3 + k * s * 0.15 + pata * k * s, -s * 0.25, s * 0.12, s * 0.25), oscuro);
+      c.drawRect(Rect.fromLTWH(s * 0.1 + k * s * 0.12 - pata * k * s, -s * 0.25, s * 0.12, s * 0.25), oscuro);
+    }
+    c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(-s * 0.45, -s * 0.62, s * 0.8, s * 0.4), Radius.circular(s * 0.06)), metal);
+    // Remaches
+    for (var k = 0; k < 3; k++) {
+      c.drawCircle(Offset(-s * 0.32 + k * s * 0.25, -s * 0.42), s * 0.035, oscuro);
+    }
+    // Lanzabombas
+    c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(-s * 0.35, -s * 0.86, s * 0.34, s * 0.26), Radius.circular(s * 0.05)), oscuro);
+    c.drawCircle(Offset(-s * 0.18, -s * 0.86), s * 0.1, Paint()..color = const Color(0xFF2B2F3A));
+    // Cabeza cuadrada con visor
+    final cab = Rect.fromLTWH(s * 0.12, -s * 0.9, s * 0.42, s * 0.4);
+    c.drawRRect(RRect.fromRectAndRadius(cab, Radius.circular(s * 0.06)), metal);
+    c.drawRect(Rect.fromLTWH(s * 0.26, -s * 0.8, s * 0.26, s * 0.1), Paint()..color = const Color(0xFF1F2A3A));
+    final ojo = (e.t * 3).floor().isEven ? const Color(0xFFFF3B3B) : const Color(0xFFFF8A8A);
+    c.drawCircle(Offset(s * 0.44, -s * 0.75), s * 0.04, Paint()..color = ojo);
+    // Antena
+    c.drawLine(Offset(s * 0.22, -s * 0.9), Offset(s * 0.18, -s * 1.08),
+        Paint()
+          ..color = oscuro.color
+          ..strokeWidth = s * 0.04);
+    c.drawCircle(Offset(s * 0.18, -s * 1.1), s * 0.05, Paint()..color = ojo);
   }
 
   void _jefe(Canvas c, double s, JefeVivo j) {
@@ -1263,6 +1319,18 @@ class PintorJuego extends CustomPainter {
         final crece = 1 + (1.1 - p.dividir.clamp(0, 1.1)) * 0.3;
         c.drawCircle(Offset.zero, r * crece, Paint()..color = const Color(0xCC8BE03A));
         c.drawCircle(Offset(-r * 0.3, -r * 0.3), r * 0.25, Paint()..color = Colors.white70);
+      case TipoProyectil.bomba:
+        // Bomba que flota: parpadea más rápido justo antes de explotar
+        final queda = p.dividir.clamp(0.0, 2.0);
+        final parpadeo = (motor.t * (queda < 0.6 ? 20 : 6)).floor().isEven;
+        c.drawCircle(Offset.zero, r * 1.05, Paint()..color = const Color(0xFF2B2F3A));
+        c.drawCircle(Offset(-r * 0.3, -r * 0.3), r * 0.25, Paint()..color = Colors.white24);
+        for (var k = 0; k < 8; k++) {
+          final a = k * pi / 4;
+          c.drawCircle(Offset(cos(a), sin(a)) * r * 1.05, r * 0.14, Paint()..color = const Color(0xFF5C6678));
+        }
+        c.drawCircle(Offset.zero, r * 0.3,
+            Paint()..color = parpadeo ? const Color(0xFFFF3B3B) : const Color(0xFF7A1A1A));
       case TipoProyectil.acido:
         c.drawCircle(Offset.zero, r * 1.3, Paint()..color = const Color(0x558BE03A));
         c.drawCircle(Offset.zero, r * 0.9, Paint()..color = const Color(0xFF6BD020));

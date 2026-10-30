@@ -39,6 +39,9 @@ enum TipoEnemigo {
 
   /// Perro de espinas: se infla y explota cuando Paco se acerca.
   espinoso,
+
+  /// Perro robot: lanza una bomba que flota y explota en 8 espinas.
+  robot,
 }
 
 class Aparicion {
@@ -186,6 +189,7 @@ class _Generador {
       if (w == 5 || w >= 9) TipoEnemigo.hielo,
       if (w == 6 || w == 7 || w >= 9) TipoEnemigo.llamas,
       if (w == 6 || w == 8 || w >= 9) TipoEnemigo.acido,
+      if (w == 6 || w >= 9) TipoEnemigo.robot,
     ];
     if (especiales.isNotEmpty && azar(0.4)) {
       return especiales[r.nextInt(especiales.length)];

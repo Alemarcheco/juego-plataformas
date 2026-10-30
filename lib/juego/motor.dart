@@ -32,6 +32,9 @@ class Enemigo extends Cuerpo {
   /// El perro de espinas se infla antes de explotar.
   double inflar = 0;
 
+  /// Los perros que lanzan cosas se paran y brillan un momento antes.
+  double aviso = 0;
+
   Enemigo(this.tipo, double x, double y, double w, double h, this.t)
       : baseX = x,
         baseY = y,
@@ -45,6 +48,7 @@ class Enemigo extends Cuerpo {
         TipoEnemigo.hielo,
         TipoEnemigo.llamas,
         TipoEnemigo.acido,
+        TipoEnemigo.robot,
         TipoEnemigo.espinoso,
       }.contains(tipo);
 }
@@ -200,6 +204,7 @@ class Motor {
         case TipoEnemigo.hielo:
         case TipoEnemigo.llamas:
         case TipoEnemigo.acido:
+        case TipoEnemigo.robot:
         case TipoEnemigo.espinoso:
           enemigos.add(Enemigo(a.tipo, a.x, a.y - 0.8, 0.95, 0.8, fase));
         case TipoEnemigo.volador:
@@ -420,6 +425,7 @@ class Motor {
         case TipoEnemigo.hielo:
         case TipoEnemigo.llamas:
         case TipoEnemigo.acido:
+        case TipoEnemigo.robot:
         case TipoEnemigo.espinoso:
           if (_atacaEnemigo(e, dt)) continue;
           e.vx = e.dir * vel * (e.tipo == TipoEnemigo.perro || e.tipo == TipoEnemigo.saltarin ? 1 : 0.6);
@@ -493,33 +499,60 @@ class Motor {
       case TipoEnemigo.hielo:
       case TipoEnemigo.llamas:
       case TipoEnemigo.acido:
+      case TipoEnemigo.robot:
+        if (e.aviso > 0) {
+          // Se para, mira a Paco y brilla; luego lanza
+          e.aviso -= dt;
+          e.vx = 0;
+          e.vy += (enAgua ? 11 : 40) * dt;
+          mover(e, dt);
+          if (e.aviso <= 0) {
+            _lanzaEnemigo(e);
+          } else {
+            e.dir = paco.centroX > e.centroX ? 1 : -1;
+          }
+          _contacto(e);
+          return true;
+        }
         e.disparo -= dt;
         final alcance = e.tipo == TipoEnemigo.llamas ? 5.0 : 10.0;
         if (e.disparo <= 0 && dx.abs() < alcance && dy.abs() < 3) {
-          e.disparo = e.tipo == TipoEnemigo.llamas ? 1.8 : 2.8;
+          e.disparo = switch (e.tipo) {
+            TipoEnemigo.llamas => 2.2,
+            TipoEnemigo.robot => 3.6,
+            _ => 3.0,
+          };
           e.dir = dx > 0 ? 1 : -1;
-          final x = e.centroX + e.dir * 0.5 - 0.25;
-          final y = e.y + 0.15;
-          switch (e.tipo) {
-            case TipoEnemigo.hielo:
-              proyectiles.add(Proyectil(TipoProyectil.espinaNieve, x, y, 0.45, 0.35,
-                  vx: e.dir * 6.0, vy: -4, gravedad: 9));
-            case TipoEnemigo.llamas:
-              for (var k = 0; k < 3; k++) {
-                proyectiles.add(Proyectil(TipoProyectil.fuego, x, y + 0.1, 0.45, 0.45,
-                    vx: e.dir * (5.0 + k), vy: (k - 1) * 0.8, vida: 0.55));
-              }
-            case TipoEnemigo.acido:
-              proyectiles.add(Proyectil(TipoProyectil.acido, x, y, 0.45, 0.45,
-                  vx: e.dir * 4.0, mortal: true));
-            default:
-              break;
-          }
+          e.aviso = 0.7;
         }
       default:
         break;
     }
     return false;
+  }
+
+  void _lanzaEnemigo(Enemigo e) {
+    final x = e.centroX + e.dir * 0.5 - 0.25;
+    final y = e.y + 0.15;
+    switch (e.tipo) {
+      case TipoEnemigo.hielo:
+        proyectiles.add(Proyectil(TipoProyectil.espinaNieve, x, y, 0.45, 0.35,
+            vx: e.dir * 6.0, vy: -4, gravedad: 9));
+      case TipoEnemigo.llamas:
+        for (var k = 0; k < 3; k++) {
+          proyectiles.add(Proyectil(TipoProyectil.fuego, x, y + 0.1, 0.45, 0.45,
+              vx: e.dir * (5.0 + k), vy: (k - 1) * 0.8, vida: 0.55));
+        }
+      case TipoEnemigo.acido:
+        proyectiles.add(Proyectil(TipoProyectil.acido, x, y, 0.45, 0.45,
+            vx: e.dir * 4.0, mortal: true));
+      case TipoEnemigo.robot:
+        // La bomba flota despacio hacia Paco y explota en 8 espinas
+        proyectiles.add(Proyectil(TipoProyectil.bomba, x, y - 0.4, 0.6, 0.6,
+            vx: e.dir * 2.2, vy: -1.2, gravedad: 1.2, dividir: 1.8));
+      default:
+        break;
+    }
   }
 
   /// Paco toca a un enemigo: o lo pisa o se hace daño.
@@ -763,6 +796,16 @@ class Motor {
         if (p.dividir <= 0) {
           // El copo se rompe en 8 espinas de nieve; la burbuja de veneno
           // explota en gotas
+          if (p.tipo == TipoProyectil.bomba) {
+            for (var k = 0; k < 8; k++) {
+              final a = k * pi / 4;
+              nuevos.add(Proyectil(TipoProyectil.espina, p.centroX - 0.2,
+                  p.y + p.h / 2 - 0.2, 0.4, 0.4,
+                  vx: cos(a) * 6, vy: sin(a) * 6, vida: 0.9));
+            }
+            p.fuera = true;
+            continue;
+          }
           final copo = p.tipo == TipoProyectil.copo;
           final trozos = copo ? 8 : 6;
           for (var k = 0; k < trozos; k++) {
@@ -793,6 +836,10 @@ class Motor {
       p.y += p.vy * dt;
       p.giro += dt * 8;
       if (p.toca(paco)) {
+        if (p.tipo == TipoProyectil.bomba) {
+          p.dividir = 0.0001; // la bomba explota al tocar a Paco
+          continue;
+        }
         if (p.mortal) {
           if (invencible <= 0) _morir();
         } else {
