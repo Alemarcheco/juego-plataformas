@@ -719,7 +719,7 @@ class PintorJuego extends CustomPainter {
     if (!e.vivo) {
       c.scale(1, 0.35);
     }
-    c.scale(e.dir.toDouble(), 1);
+    c.scale(e.dir.toDouble() * e.tamano, e.tamano);
     // Aviso antes de lanzar: brilla del color de lo que va a lanzar
     final aviso = e.aviso > 0 && e.vivo
         ? switch (e.tipo) {

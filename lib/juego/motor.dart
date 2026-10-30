@@ -35,6 +35,9 @@ class Enemigo extends Cuerpo {
   /// Los perros que lanzan cosas se paran y brillan un momento antes.
   double aviso = 0;
 
+  /// En el mundo secreto los enemigos son gigantes.
+  double tamano = 1;
+
   Enemigo(this.tipo, double x, double y, double w, double h, this.t)
       : baseX = x,
         baseY = y,
@@ -199,8 +202,11 @@ class Motor {
     enemigos.clear();
     proyectiles.clear();
     final rnd = Random(nivel.indice);
+    // En el mundo secreto los perros y los peces son gigantes
+    final g = nivel.esSecreto ? 1.7 : 1.0;
     for (final a in mapa.enemigos) {
       final fase = rnd.nextDouble() * 6;
+      final antes = enemigos.length;
       switch (a.tipo) {
         case TipoEnemigo.perro:
         case TipoEnemigo.saltarin:
@@ -209,16 +215,21 @@ class Motor {
         case TipoEnemigo.acido:
         case TipoEnemigo.robot:
         case TipoEnemigo.espinoso:
-          enemigos.add(Enemigo(a.tipo, a.x, a.y - 0.8, 0.95, 0.8, fase));
+          enemigos.add(Enemigo(a.tipo, a.x, a.y - 0.8 * g, 0.95 * g, 0.8 * g, fase));
         case TipoEnemigo.volador:
-          enemigos.add(Enemigo(a.tipo, a.x, a.y, 0.9, 0.7, fase));
+          enemigos.add(Enemigo(a.tipo, a.x, a.y - 0.7 * (g - 1), 0.9 * g, 0.7 * g, fase));
         case TipoEnemigo.pez:
         case TipoEnemigo.pezGlobo:
         case TipoEnemigo.pezHielo:
         case TipoEnemigo.pezMorado:
-          enemigos.add(Enemigo(a.tipo, a.x, a.y, 0.95, 0.65, fase));
+          enemigos.add(Enemigo(a.tipo, a.x, a.y - 0.65 * (g - 1), 0.95 * g, 0.65 * g, fase));
         case TipoEnemigo.fuego:
           enemigos.add(Enemigo(a.tipo, a.x, a.y, 0.75, 0.75, fase));
+      }
+      if (a.tipo != TipoEnemigo.fuego) {
+        for (final e in enemigos.skip(antes)) {
+          e.tamano = g;
+        }
       }
     }
     final datos = nivel.jefe;
