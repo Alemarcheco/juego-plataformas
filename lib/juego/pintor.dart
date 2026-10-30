@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../datos/mundos.dart';
+import '../datos/skins.dart';
 import '../progreso.dart';
 import 'generador.dart';
 import 'motor.dart';
@@ -523,6 +524,66 @@ class PintorJuego extends CustomPainter {
     }
   }
 
+  /// Detalles de los trajes de premio: llamas, burbujas de ácido, brillos
+  /// o sombrero de hongo.
+  void _adorno(Canvas c, double u, Adorno a, Offset cab, Offset puntaCola) {
+    final t = motor.t;
+    switch (a) {
+      case Adorno.ninguno:
+        break;
+      case Adorno.llamas:
+        for (final (base, tam) in [(cab + Offset(0, -u * 0.26), 1.0), (puntaCola, 0.7)]) {
+          for (var k = 0; k < 3; k++) {
+            final alto = u * (0.22 + sin(t * 14 + k * 2) * 0.06) * tam;
+            final x = base.dx + (k - 1) * u * 0.1 * tam;
+            c.drawPath(
+                Path()
+                  ..moveTo(x - u * 0.07 * tam, base.dy)
+                  ..quadraticBezierTo(x - u * 0.05 * tam, base.dy - alto * 0.6, x, base.dy - alto)
+                  ..quadraticBezierTo(x + u * 0.05 * tam, base.dy - alto * 0.6, x + u * 0.07 * tam, base.dy)
+                  ..close(),
+                Paint()..color = k == 1 ? const Color(0xFFFFD23F) : const Color(0xFFFF7A1A));
+          }
+        }
+      case Adorno.acido:
+        final burbuja = Paint()..color = const Color(0xCC8BE03A);
+        for (var k = 0; k < 3; k++) {
+          final f = (t * 0.9 + k / 3) % 1.0;
+          c.drawCircle(cab + Offset(-u * 0.3 + k * u * 0.25, -u * 0.3 - f * u * 0.7),
+              u * (0.05 + 0.03 * (1 - f)), burbuja);
+        }
+        c.drawCircle(puntaCola, u * 0.08, Paint()..color = const Color(0xFF8BE03A));
+      case Adorno.brillo:
+        final brillo = Paint()..color = Colors.white;
+        for (var k = 0; k < 3; k++) {
+          final f = (t * 1.3 + k * 0.37) % 1.0;
+          final tam = sin(f * pi) * u * 0.09;
+          final o = Offset(-u * 0.45 + k * u * 0.45, -u * 1.05 + (k.isEven ? 0 : u * 0.25));
+          c.drawPath(
+              Path()
+                ..moveTo(o.dx, o.dy - tam * 2)
+                ..lineTo(o.dx + tam * 0.5, o.dy)
+                ..lineTo(o.dx, o.dy + tam * 2)
+                ..lineTo(o.dx - tam * 0.5, o.dy)
+                ..close()
+                ..moveTo(o.dx - tam * 2, o.dy)
+                ..lineTo(o.dx, o.dy - tam * 0.5)
+                ..lineTo(o.dx + tam * 2, o.dy)
+                ..lineTo(o.dx, o.dy + tam * 0.5)
+                ..close(),
+              brillo);
+        }
+      case Adorno.hongo:
+        // Sombrero de seta roja con puntos blancos
+        final sombrero = Rect.fromCenter(center: cab + Offset(0, -u * 0.2), width: u * 0.8, height: u * 0.5);
+        c.drawArc(sombrero, pi, pi, true, Paint()..color = const Color(0xFFE23B3B));
+        final punto = Paint()..color = Colors.white;
+        c.drawCircle(cab + Offset(-u * 0.18, -u * 0.32), u * 0.06, punto);
+        c.drawCircle(cab + Offset(u * 0.06, -u * 0.38), u * 0.07, punto);
+        c.drawCircle(cab + Offset(u * 0.24, -u * 0.27), u * 0.05, punto);
+    }
+  }
+
   /// Ala de plumas que sale del hombro y gira (ángulo en radianes, 0 = hacia atrás).
   void _alaPerro(Canvas c, double s, Offset hombro, double angulo, Color color) {
     c.save();
@@ -650,6 +711,7 @@ class PintorJuego extends CustomPainter {
       ..strokeWidth = u * 0.02;
     c.drawLine(cab + Offset(u * 0.22, u * 0.12), cab + Offset(u * 0.42, u * 0.08), bigote);
     c.drawLine(cab + Offset(u * 0.22, u * 0.14), cab + Offset(u * 0.42, u * 0.18), bigote);
+    _adorno(c, u, skin.adorno, cab, Offset(-u * 0.6, -u * 0.95));
     if (motor.enAgua) {
       // A Paco no le gusta mojarse: casco de buzo
       c.drawCircle(cab + Offset(u * 0.03, -u * 0.04), u * 0.42,

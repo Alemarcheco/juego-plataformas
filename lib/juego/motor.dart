@@ -160,6 +160,9 @@ class Motor {
   double tiempoMuerto = 0;
   double tiempoGanado = 0;
   bool control = false;
+
+  /// Enemigos pisados desde la última vez que la pantalla los contó.
+  final List<TipoEnemigo> derrotados = [];
   bool puertaCerrada = false;
 
   /// Paco entró en el portal del mundo secreto.
@@ -645,6 +648,7 @@ class Motor {
       p.vy = mandos.salto ? -15 : -10;
       if (e is Enemigo) {
         e.vivo = false;
+        derrotados.add(e.tipo);
       } else if (e is JefeVivo) {
         _golpearJefe(e);
       }

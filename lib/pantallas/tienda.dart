@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../datos/logros.dart';
 import '../datos/skins.dart';
 import '../progreso.dart';
 import 'comunes.dart';
@@ -67,6 +68,42 @@ class _PantallaTiendaState extends State<PantallaTienda> {
     );
   }
 
+  /// Traje de premio aún sin ganar: qué hay que hacer y cuánto falta.
+  Widget _premio(Logro l) {
+    final avance = Progreso.avance(l).clamp(0, l.meta);
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.emoji_events_rounded, color: Color(0xFFFFC93C), size: 18),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(l.descripcion,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, color: Colors.white70)),
+            ),
+          ],
+        ),
+        if (l.meta > 1) ...[
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: avance / l.meta,
+              minHeight: 8,
+              color: const Color(0xFFFFC93C),
+              backgroundColor: Colors.black38,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text('$avance de ${l.meta}',
+              style: const TextStyle(fontSize: 12, color: Colors.white70)),
+        ],
+      ],
+    );
+  }
+
   Widget _tarjeta(Skin s) {
     final tiene = Progreso.comprados.contains(s.id);
     final puesto = Progreso.skinActual == s.id;
@@ -88,7 +125,9 @@ class _PantallaTiendaState extends State<PantallaTienda> {
           Text(s.nombre,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-          if (puesto)
+          if (s.logro != null && !tiene)
+            _premio(logros.firstWhere((l) => l.id == s.logro))
+          else if (puesto)
             const Text('Puesto',
                 style: TextStyle(color: Color(0xFFF59A33), fontWeight: FontWeight.w800))
           else

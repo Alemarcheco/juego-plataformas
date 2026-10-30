@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../datos/skins.dart';
@@ -52,6 +54,51 @@ class _CaraPaco extends CustomPainter {
     for (final y in [0.0, 5.0]) {
       c.drawLine(o(14, 48 + y), o(26, 47 + y * 0.8), linea);
       c.drawLine(o(66, 48 + y), o(54, 47 + y * 0.8), linea);
+    }
+    switch (skin.adorno) {
+      case Adorno.ninguno:
+        break;
+      case Adorno.llamas:
+        for (var k = 0; k < 3; k++) {
+          final x = 32.0 + k * 8;
+          final alto = k == 1 ? 16.0 : 11.0;
+          c.drawPath(
+              Path()
+                ..moveTo((x - 5) * u, 24 * u)
+                ..quadraticBezierTo((x - 3) * u, (24 - alto * 0.6) * u, x * u, (24 - alto) * u)
+                ..quadraticBezierTo((x + 3) * u, (24 - alto * 0.6) * u, (x + 5) * u, 24 * u)
+                ..close(),
+              Paint()..color = k == 1 ? const Color(0xFFFFD23F) : const Color(0xFFFF7A1A));
+        }
+      case Adorno.acido:
+        final burbuja = Paint()..color = const Color(0xCC8BE03A);
+        c.drawCircle(o(22, 16), 4 * u, burbuja);
+        c.drawCircle(o(58, 12), 3 * u, burbuja);
+        c.drawCircle(o(66, 22), 2.5 * u, burbuja);
+      case Adorno.brillo:
+        final brillo = Paint()..color = Colors.white;
+        for (final (x, y, t) in [(16.0, 18.0, 4.0), (64.0, 14.0, 5.0), (68.0, 30.0, 3.0)]) {
+          c.drawPath(
+              Path()
+                ..moveTo(x * u, (y - t * 2) * u)
+                ..lineTo((x + t * 0.5) * u, y * u)
+                ..lineTo(x * u, (y + t * 2) * u)
+                ..lineTo((x - t * 0.5) * u, y * u)
+                ..close()
+                ..moveTo((x - t * 2) * u, y * u)
+                ..lineTo(x * u, (y - t * 0.5) * u)
+                ..lineTo((x + t * 2) * u, y * u)
+                ..lineTo(x * u, (y + t * 0.5) * u)
+                ..close(),
+              brillo);
+        }
+      case Adorno.hongo:
+        c.drawArc(Rect.fromCenter(center: o(40, 28), width: 64 * u, height: 40 * u), pi, pi, true,
+            Paint()..color = const Color(0xFFE23B3B));
+        final punto = Paint()..color = Colors.white;
+        c.drawCircle(o(26, 18), 4.5 * u, punto);
+        c.drawCircle(o(42, 13), 5 * u, punto);
+        c.drawCircle(o(56, 20), 4 * u, punto);
     }
   }
 

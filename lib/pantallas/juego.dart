@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../datos/logros.dart';
 import '../datos/mundos.dart';
+import '../datos/skins.dart';
 import '../juego/motor.dart';
 import '../juego/pintor.dart';
 import '../progreso.dart';
@@ -27,6 +29,10 @@ class _PantallaJuegoState extends State<PantallaJuego>
   bool pausa = false;
   bool fin = false;
 
+  /// Logro recién ganado que se enseña arriba un momento.
+  Logro? _logro;
+  int _logroCuadros = 0;
+
   // Teclado y botones táctiles se suman
   final Set<LogicalKeyboardKey> _teclas = {};
   bool _tIzq = false, _tDer = false, _tSalto = false;
@@ -48,6 +54,13 @@ class _PantallaJuegoState extends State<PantallaJuego>
     final jefeAntes = motor.jefe?.vidas;
     motor.actualizar(dt);
     _cuadro.value++;
+    if (motor.derrotados.isNotEmpty) {
+      for (final t in motor.derrotados) {
+        Progreso.contarDerrota(t.name).then(_avisarLogros);
+      }
+      motor.derrotados.clear();
+    }
+    if (_logro != null && --_logroCuadros <= 0) setState(() => _logro = null);
     if (motor.vidas != vidasAntes ||
         motor.pescados != pescadosAntes ||
         motor.estado != estadoAntes ||
@@ -57,10 +70,20 @@ class _PantallaJuegoState extends State<PantallaJuego>
     }
     if (motor.terminado && !fin) {
       fin = true;
-      Progreso.completar(nivel.indice, motor.pescados);
+      Progreso.completar(nivel.indice, motor.pescados)
+          .then((_) => Progreso.revisarLogros())
+          .then(_avisarLogros);
       if (motor.secretoEncontrado) Progreso.abrirSecreto();
       setState(() {});
     }
+  }
+
+  void _avisarLogros(List<Logro> nuevos) {
+    if (nuevos.isEmpty || !mounted) return;
+    setState(() {
+      _logro = nuevos.last;
+      _logroCuadros = 60 * 4;
+    });
   }
 
   void _aplicarMandos() {
@@ -139,6 +162,7 @@ class _PantallaJuegoState extends State<PantallaJuego>
             ),
             SafeArea(child: _hud()),
             if (!fin) SafeArea(child: _controles()),
+            if (_logro != null) _avisoLogro(_logro!),
             if (pausa) _ventanaPausa(),
             if (fin) _ventanaFin(),
           ],
@@ -197,6 +221,43 @@ class _PantallaJuegoState extends State<PantallaJuego>
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _avisoLogro(Logro l) {
+    final skin = skins.firstWhere((s) => s.id == l.skin);
+    return Positioned(
+      top: 56,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 8, 18, 8),
+          decoration: BoxDecoration(
+            color: const Color(0xEE1F2D40),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFFFC93C), width: 2),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RetratoPaco(tamano: 46, skin: skin),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('¡Logro: ${l.nombre}!',
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFFFFC93C))),
+                  Text('Ganaste el traje ${skin.nombre}',
+                      style: const TextStyle(fontSize: 14, color: Colors.white)),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
