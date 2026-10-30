@@ -326,6 +326,50 @@ class PintorJuego extends CustomPainter {
   }
 
   // ------------------------------------------------------------- casillas
+  /// Un trozo de coral ramificado (en lugar de un bloque de ladrillo).
+  void _coral(Canvas c, Rect r, double s, int x, int y) {
+    final m = motor.mapa;
+    const colores = [Color(0xFFFF6F91), Color(0xFFFF9A5A), Color(0xFFB76CE0)];
+    final color = colores[x % colores.length];
+    final cuerpo = Paint()
+      ..color = color
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final claro = Paint()..color = Color.lerp(color, Colors.white, 0.45)!;
+    final oscuro = Paint()..color = Color.lerp(color, Colors.black, 0.25)!;
+    final arriba = m.en(x, y - 1) == Casilla.ladrillo;
+    final abajo = m.en(x, y + 1) == Casilla.ladrillo;
+    // Crece desde el suelo (punta arriba) o cuelga del techo (punta abajo)
+    final colgante = esSolida(m.en(x, y - 1)) && !esSolida(m.en(x, y + 1)) ||
+        (m.en(x, y - 1) == Casilla.ladrillo && !esSolida(m.en(x, y + 1)) &&
+            esSolida(m.en(x, y - 2)) && m.en(x, y - 2) != Casilla.ladrillo);
+    final d = colgante ? 1.0 : -1.0; // hacia dónde crece
+    final cx = r.left + s * 0.5;
+    final base = colgante ? r.top : r.bottom;
+    final punta = colgante ? r.bottom : r.top;
+    final esPunta = colgante ? !abajo : !arriba;
+    // Tronco
+    c.drawLine(Offset(cx, base), Offset(cx, esPunta ? punta - d * s * 0.15 : punta),
+        cuerpo..strokeWidth = s * 0.42);
+    // Ramas que se abren a los lados y se curvan hacia la punta
+    final lado = (x + y).isEven ? 1.0 : -1.0;
+    for (final k in [lado, -lado]) {
+      final y0 = base + d * s * (k == lado ? 0.35 : 0.6);
+      final rama = Path()
+        ..moveTo(cx, y0)
+        ..quadraticBezierTo(cx + k * s * 0.42, y0, cx + k * s * 0.4, y0 + d * s * 0.32);
+      c.drawPath(rama, cuerpo..strokeWidth = s * 0.24);
+      c.drawCircle(Offset(cx + k * s * 0.4, y0 + d * s * 0.32), s * 0.12, claro);
+    }
+    if (esPunta) {
+      c.drawCircle(Offset(cx, punta - d * s * 0.15), s * 0.17, claro);
+    }
+    // Pólipos
+    for (var i = 0; i < 3; i++) {
+      c.drawCircle(Offset(cx + (i - 1) * s * 0.06, base + d * s * (0.2 + i * 0.25)), s * 0.035, oscuro);
+    }
+  }
+
   void _casillas(Canvas c, double s, double cam) {
     final m = motor.mapa;
     final tema = motor.nivel.tema;
@@ -360,6 +404,8 @@ class PintorJuego extends CustomPainter {
             if (!esSolida(m.en(x, y - 1))) {
               c.drawRect(Rect.fromLTWH(r.left, r.top, r.width, s * 0.32), cesped);
             }
+          case Casilla.ladrillo when tema.decorado == Decorado.corales:
+            _coral(c, r, s, x, y);
           case Casilla.ladrillo:
             c.drawRect(r, ladrillo);
             c.drawLine(Offset(r.left, r.top + s / 2), Offset(r.right, r.top + s / 2), junta);
@@ -442,7 +488,7 @@ class PintorJuego extends CustomPainter {
       ..strokeWidth = s * 0.12;
     if (m.controlX > 0) {
       final x = m.controlX * s + s * 0.5;
-      final suelo = m.superficie(m.controlX.floor()) * s;
+      final suelo = m.suelo(m.controlX.floor()) * s;
       c.drawLine(Offset(x, suelo), Offset(x, suelo - s * 2.2), palo);
       final color = motor.control ? const Color(0xFF4CD964) : const Color(0xFFB0B0B0);
       final ondea = sin(motor.t * 5) * s * 0.1;
@@ -455,7 +501,7 @@ class PintorJuego extends CustomPainter {
     }
     if (motor.jefe == null) {
       final x = m.metaX * s + s * 0.5;
-      final suelo = m.superficie(m.metaX.floor()) * s;
+      final suelo = m.suelo(m.metaX.floor()) * s;
       c.drawLine(Offset(x, suelo), Offset(x, suelo - s * 6), palo);
       c.drawCircle(Offset(x, suelo - s * 6), s * 0.22, Paint()..color = const Color(0xFFFFC93C));
       final ondea = sin(motor.t * 5) * s * 0.15;
@@ -468,6 +514,30 @@ class PintorJuego extends CustomPainter {
       _pescado(c, Offset(x + s * 0.7, suelo - s * 5.2), s * 0.3,
           Paint()..color = Colors.white, Paint()..color = Colors.white70);
     }
+  }
+
+  /// Ala de plumas que sale del hombro y gira (ángulo en radianes, 0 = hacia atrás).
+  void _alaPerro(Canvas c, double s, Offset hombro, double angulo, Color color) {
+    c.save();
+    c.translate(hombro.dx, hombro.dy);
+    c.rotate(angulo);
+    final ala = Path()
+      ..moveTo(0, -s * 0.06)
+      ..quadraticBezierTo(-s * 0.3, -s * 0.22, -s * 0.62, -s * 0.12)
+      ..lineTo(-s * 0.5, -s * 0.03)
+      ..lineTo(-s * 0.56, s * 0.03)
+      ..lineTo(-s * 0.4, s * 0.06)
+      ..lineTo(-s * 0.42, s * 0.12)
+      ..quadraticBezierTo(-s * 0.18, s * 0.12, 0, s * 0.06)
+      ..close();
+    c.drawPath(ala, Paint()..color = color);
+    c.drawPath(
+        ala,
+        Paint()
+          ..color = const Color(0x33000000)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = s * 0.03);
+    c.restore();
   }
 
   // ------------------------------------------------------------- personajes
@@ -689,10 +759,13 @@ class PintorJuego extends CustomPainter {
         }
         _perro(c, s, destello ? const Color(0xFFFF6B6B) : const Color(0xFF8A6AB0), paso: e.t * 8);
       case TipoEnemigo.volador:
+        // Las alas giran desde el hombro: el ala de atrás va detrás del perro
+        final aleteo = sin(e.t * 14);
+        final hombro = Offset(s * 0.02, -s * 0.56);
+        _alaPerro(c, s * 1.15, hombro.translate(s * 0.06, -s * 0.02),
+            0.65 + sin(e.t * 14 - 0.4) * 0.8, const Color(0xFFC9D3E0));
         _perro(c, s * 0.9, const Color(0xFFD9C27A), paso: 0);
-        final ala = Paint()..color = Colors.white.withValues(alpha: 0.9);
-        final aleteo = sin(e.t * 20) * s * 0.25;
-        c.drawOval(Rect.fromCenter(center: Offset(-s * 0.05, -s * 0.75 - aleteo), width: s * 0.5, height: s * 0.3), ala);
+        _alaPerro(c, s * 1.15, hombro, 0.55 + aleteo * 0.85, Colors.white);
       case TipoEnemigo.pez:
         final cuerpo = Paint()..color = const Color(0xFFFF8A65);
         final aleta = Paint()..color = const Color(0xFFE0603A);

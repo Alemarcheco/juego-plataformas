@@ -93,6 +93,19 @@ class Mapa {
     }
     return alto;
   }
+
+  /// Fila del suelo donde se puede estar de pie, saltándose el techo
+  /// (en castillos y pirámides la columna empieza con bloques arriba).
+  int suelo(int x) {
+    var y = 0;
+    while (y < alto && esSolida(en(x, y))) {
+      y++;
+    }
+    while (y < alto && !esSolida(en(x, y))) {
+      y++;
+    }
+    return y;
+  }
 }
 
 /// Construye el mapa de un nivel. Siempre da el mismo mapa para el mismo nivel.
