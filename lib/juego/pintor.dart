@@ -51,20 +51,7 @@ class PintorJuego extends CustomPainter {
     for (final p in motor.proyectiles) {
       _proyectil(canvas, s, p);
     }
-    if (motor.jugadores.isEmpty) {
-      _paco(canvas, s);
-    } else {
-      // Dos jugadores: el segundo gato lleva otro traje
-      final activo = motor.paco;
-      for (final (i, j) in motor.jugadores.indexed) {
-        motor.usar(j);
-        _paco(canvas, s,
-            skin: i == 0 ? Progreso.skin : Progreso.skinSegundo,
-            muerto: !j.vivo || motor.estado == Estado.muerto);
-      }
-      motor.usar(motor.jugadores.firstWhere((j) => j.cuerpo == activo,
-          orElse: () => motor.jugadores.first));
-    }
+    _paco(canvas, s);
     canvas.restore();
 
     if (motor.enAgua) {
@@ -622,24 +609,24 @@ class PintorJuego extends CustomPainter {
   }
 
   // ------------------------------------------------------------- personajes
-  void _paco(Canvas c, double s, {Skin? skin, bool? muerto}) {
+  void _paco(Canvas c, double s) {
     final p = motor.paco;
-    final caido = muerto ?? motor.estado == Estado.muerto;
     if (motor.invencible > 0 && (motor.t * 12).floor().isEven &&
-        motor.estado == Estado.jugando && !caido) {
+        motor.estado == Estado.jugando) {
       return;
     }
+    final muerto = motor.estado == Estado.muerto;
     final dir = motor.dirPaco.toDouble();
     c.save();
     c.translate((p.x + p.w / 2) * s, (p.y + p.h) * s);
-    if (caido) {
+    if (muerto) {
       c.translate(0, -p.h * s / 2);
       c.rotate(pi);
       c.translate(0, p.h * s / 2);
     }
     c.scale(dir, 1);
     final u = s; // una casilla
-    skin ??= Progreso.skin;
+    final skin = Progreso.skin;
     final naranja = Paint()..color = skin.cuerpo;
     final oscuro = Paint()..color = skin.oscuro;
     final crema = Paint()..color = skin.crema;
@@ -706,7 +693,7 @@ class PintorJuego extends CustomPainter {
     }
     c.drawOval(Rect.fromCenter(center: cab + Offset(u * 0.12, u * 0.1), width: u * 0.3, height: u * 0.2),
         skin.puntas ? oscuro : crema);
-    if (caido) {
+    if (muerto) {
       final x = Paint()
         ..color = negro.color
         ..strokeWidth = u * 0.05;
