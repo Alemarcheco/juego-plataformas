@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'pantallas/inicio.dart';
 import 'progreso.dart';
 import 'sonido.dart';
+import 'version.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,6 +13,7 @@ Future<void> main() async {
     DeviceOrientation.landscapeRight,
   ]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  Progreso.perfil = await Progreso.ultimoPerfil() ?? 'tiborio';
   await Progreso.cargar();
   await Sonido.iniciar();
   Sonido.musica('planicie');
@@ -53,7 +55,7 @@ class _PaquitoAdventureState extends State<PaquitoAdventure>
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Paquito Adventure',
+      title: 'Paquito Adventure $versionJuego',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(

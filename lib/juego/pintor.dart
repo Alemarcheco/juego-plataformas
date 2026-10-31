@@ -17,7 +17,7 @@ class PintorJuego extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final s = size.height / Mapa.alto;
     motor.anchoVista = size.width / s;
-    final tema = motor.nivel.tema;
+    final tema = motor.tema;
     final cam = motor.camX;
 
     // Cielo
@@ -28,6 +28,9 @@ class PintorJuego extends CustomPainter {
         colors: [tema.cieloArriba, tema.cieloAbajo],
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, cielo);
+    if (motor.nivel.creado == null || motor.nivel.creado!.isNotEmpty) {
+      gatoBailando(canvas, size, motor.t, tema);
+    }
     _decorado(canvas, size, s, cam, tema);
 
     canvas.save();
@@ -51,26 +54,36 @@ class PintorJuego extends CustomPainter {
     for (final p in motor.proyectiles) {
       _proyectil(canvas, s, p);
     }
-    if (motor.jugadores.isEmpty) {
-      _paco(canvas, s);
-    } else {
-      // Dos jugadores: el segundo gato lleva otro traje
-      final activo = motor.paco;
-      for (final (i, j) in motor.jugadores.indexed) {
-        motor.usar(j);
-        _paco(canvas, s,
-            skin: i == 0 ? Progreso.skin : Progreso.skinSegundo,
-            muerto: !j.vivo || motor.estado == Estado.muerto);
-      }
-      motor.usar(motor.jugadores.firstWhere((j) => j.cuerpo == activo,
-          orElse: () => motor.jugadores.first));
-    }
+    _paco(canvas, s);
+    _aguaCreador(canvas, s);
     canvas.restore();
 
-    if (motor.enAgua) {
+    if (motor.enAgua && motor.nivelAgua < 0) {
       canvas.drawRect(Offset.zero & size,
           Paint()..color = const Color(0xFF0A4A80).withValues(alpha: 0.12));
     }
+  }
+
+  /// Agua que sube y baja (disparadores del creador de niveles).
+  void _aguaCreador(Canvas c, double s) {
+    final nivel = motor.nivelAgua;
+    if (nivel < 0 || nivel >= Mapa.alto) return;
+    final x0 = motor.camX * s - s;
+    final x1 = (motor.camX + motor.anchoVista + 1) * s;
+    final arriba = nivel * s;
+    final ola = Path()..moveTo(x0, arriba);
+    for (var x = x0; x <= x1; x += s * 0.5) {
+      ola.lineTo(x, arriba + sin(motor.t * 3 + x / s) * s * 0.08);
+    }
+    ola
+      ..lineTo(x1, Mapa.alto * s)
+      ..lineTo(x0, Mapa.alto * s)
+      ..close();
+    c.drawPath(ola, Paint()..color = const Color(0xFF2A8AD8).withValues(alpha: 0.35));
+    c.drawLine(Offset(x0, arriba), Offset(x1, arriba),
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.5)
+          ..strokeWidth = s * 0.06);
   }
 
   // ------------------------------------------------------------- decorado
@@ -351,12 +364,13 @@ class PintorJuego extends CustomPainter {
       ..style = PaintingStyle.stroke;
     final claro = Paint()..color = Color.lerp(color, Colors.white, 0.45)!;
     final oscuro = Paint()..color = Color.lerp(color, Colors.black, 0.25)!;
-    final arriba = m.en(x, y - 1) == Casilla.ladrillo;
-    final abajo = m.en(x, y + 1) == Casilla.ladrillo;
+    bool esCoral(Casilla c) => c == Casilla.ladrillo || c == Casilla.coral;
+    final arriba = esCoral(m.en(x, y - 1));
+    final abajo = esCoral(m.en(x, y + 1));
     // Crece desde el suelo (punta arriba) o cuelga del techo (punta abajo)
     final colgante = esSolida(m.en(x, y - 1)) && !esSolida(m.en(x, y + 1)) ||
-        (m.en(x, y - 1) == Casilla.ladrillo && !esSolida(m.en(x, y + 1)) &&
-            esSolida(m.en(x, y - 2)) && m.en(x, y - 2) != Casilla.ladrillo);
+        (esCoral(m.en(x, y - 1)) && !esSolida(m.en(x, y + 1)) &&
+            esSolida(m.en(x, y - 2)) && !esCoral(m.en(x, y - 2)));
     final d = colgante ? 1.0 : -1.0; // hacia dónde crece
     final cx = r.left + s * 0.5;
     final base = colgante ? r.top : r.bottom;
@@ -386,7 +400,7 @@ class PintorJuego extends CustomPainter {
 
   void _casillas(Canvas c, double s, double cam) {
     final m = motor.mapa;
-    final tema = motor.nivel.tema;
+    final tema = motor.tema;
     final x0 = max(0, cam.floor() - 1);
     final x1 = min(m.ancho - 1, (cam + motor.anchoVista).ceil() + 1);
     final tierra = Paint()..color = tema.tierra;
@@ -428,6 +442,20 @@ class PintorJuego extends CustomPainter {
             }
           case Casilla.ladrillo when tema.decorado == Decorado.corales:
             _coral(c, r, s, x, y);
+          case Casilla.coral:
+            _coral(c, r, s, x, y);
+          case Casilla.portalAzul:
+          case Casilla.portalNaranja:
+            final azul = cas == Casilla.portalAzul;
+            final giro = motor.t * 3;
+            for (var k = 3; k >= 1; k--) {
+              final color = azul
+                  ? Color.lerp(const Color(0xFF1F6FFF), const Color(0xFFBFE6FF), (k / 3 + sin(giro + k) * 0.2).clamp(0, 1))!
+                  : Color.lerp(const Color(0xFFFF6A00), const Color(0xFFFFE0A0), (k / 3 + sin(giro + k) * 0.2).clamp(0, 1))!;
+              c.drawOval(
+                  Rect.fromCenter(center: r.center, width: s * 0.3 * k, height: s * 0.33 * k),
+                  Paint()..color = color);
+            }
           case Casilla.ladrillo:
             c.drawRect(r, ladrillo);
             c.drawLine(Offset(r.left, r.top + s / 2), Offset(r.right, r.top + s / 2), junta);
@@ -520,7 +548,7 @@ class PintorJuego extends CustomPainter {
         ..close();
       c.drawPath(b, Paint()..color = color);
     }
-    if (motor.jefe == null) {
+    if (motor.jefe == null || motor.mini) {
       final x = m.metaX * s + s * 0.5;
       final suelo = (m.metaY ?? m.suelo(m.metaX.floor())) * s;
       c.drawLine(Offset(x, suelo), Offset(x, suelo - s * 6), palo);
@@ -594,6 +622,104 @@ class PintorJuego extends CustomPainter {
         c.drawCircle(cab + Offset(-u * 0.18, -u * 0.32), u * 0.06, punto);
         c.drawCircle(cab + Offset(u * 0.06, -u * 0.38), u * 0.07, punto);
         c.drawCircle(cab + Offset(u * 0.24, -u * 0.27), u * 0.05, punto);
+      case Adorno.hielo:
+        // Cristales de hielo en la cabeza
+        final hielo = Paint()..color = const Color(0xDDE8F8FF);
+        final borde = Paint()
+          ..color = const Color(0xFF6FB8E8)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = u * 0.02;
+        for (final (dx, alto) in [(-0.16, 0.26), (0.0, 0.36), (0.16, 0.24)]) {
+          final base = cab + Offset(u * dx, -u * 0.22);
+          final cristal = Path()
+            ..moveTo(base.dx - u * 0.06, base.dy)
+            ..lineTo(base.dx, base.dy - u * alto)
+            ..lineTo(base.dx + u * 0.06, base.dy)
+            ..close();
+          c.drawPath(cristal, hielo);
+          c.drawPath(cristal, borde);
+        }
+        final f = (t * 0.8) % 1.0;
+        c.drawCircle(puntaCola + Offset(0, f * u * 0.5), u * 0.05 * (1 - f), hielo);
+      case Adorno.angel:
+        // Aureola y alitas que aletean
+        c.drawOval(
+            Rect.fromCenter(center: cab + Offset(0, -u * 0.48 + sin(t * 3) * u * 0.03), width: u * 0.42, height: u * 0.12),
+            Paint()
+              ..color = const Color(0xFFFFD23F)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = u * 0.05);
+        final ala = Paint()..color = Colors.white;
+        final sombra = Paint()
+          ..color = const Color(0x33000000)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = u * 0.02;
+        c.save();
+        c.translate(-u * 0.1, -u * 0.6);
+        c.rotate(-0.5 + sin(t * 10) * 0.35);
+        final pluma = Path()
+          ..moveTo(0, 0)
+          ..quadraticBezierTo(-u * 0.25, -u * 0.35, -u * 0.5, -u * 0.25)
+          ..quadraticBezierTo(-u * 0.38, -u * 0.12, -u * 0.42, -u * 0.04)
+          ..quadraticBezierTo(-u * 0.2, u * 0.02, 0, 0)
+          ..close();
+        c.drawPath(pluma, ala);
+        c.drawPath(pluma, sombra);
+        c.restore();
+      case Adorno.resorte:
+        // Antena de muelle con una bolita que rebota
+        final muelle = Paint()
+          ..color = const Color(0xFFB8BCC8)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = u * 0.04;
+        final alto = u * (0.35 + sin(t * 9).abs() * 0.12);
+        final base = cab + Offset(-u * 0.02, -u * 0.26);
+        final zig = Path()..moveTo(base.dx, base.dy);
+        for (var k = 1; k <= 6; k++) {
+          zig.lineTo(base.dx + (k.isEven ? -1 : 1) * u * 0.07, base.dy - alto * k / 6);
+        }
+        c.drawPath(zig, muelle);
+        c.drawCircle(Offset(base.dx, base.dy - alto - u * 0.06), u * 0.08,
+            Paint()..color = const Color(0xFFFF4D6D));
+      case Adorno.espinas:
+        // Espinas naranjas por la espalda y la cabeza
+        final espina = Paint()..color = const Color(0xFFFF8A1F);
+        for (final x in [-0.32, -0.18, -0.04]) {
+          c.drawPath(
+              Path()
+                ..moveTo(u * (x - 0.06), -u * 0.6)
+                ..lineTo(u * (x - 0.02), -u * 0.82)
+                ..lineTo(u * (x + 0.06), -u * 0.6)
+                ..close(),
+              espina);
+        }
+        c.drawPath(
+            Path()
+              ..moveTo(cab.dx - u * 0.12, cab.dy - u * 0.24)
+              ..lineTo(cab.dx - u * 0.04, cab.dy - u * 0.5)
+              ..lineTo(cab.dx + u * 0.06, cab.dy - u * 0.26)
+              ..close(),
+            espina);
+      case Adorno.arcoiris:
+        // Arcoíris sobre la cabeza y estela de colores
+        const colores = [
+          Color(0xFFFF4D4D), Color(0xFFFF9F1C), Color(0xFFFFE14A),
+          Color(0xFF4CD964), Color(0xFF3FA8FF), Color(0xFF9B5CFF),
+        ];
+        for (var k = 0; k < colores.length; k++) {
+          c.drawArc(
+              Rect.fromCenter(center: cab + Offset(0, -u * 0.2), width: u * (0.9 - k * 0.08), height: u * (0.62 - k * 0.06)),
+              pi, pi, false,
+              Paint()
+                ..color = colores[k]
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = u * 0.04);
+        }
+        for (var k = 0; k < colores.length; k++) {
+          final f = ((t * 2 + k / colores.length) % 1.0);
+          c.drawCircle(puntaCola + Offset(-f * u * 0.5, f * u * 0.4), u * 0.05 * (1 - f),
+              Paint()..color = colores[k]);
+        }
     }
   }
 
@@ -622,24 +748,24 @@ class PintorJuego extends CustomPainter {
   }
 
   // ------------------------------------------------------------- personajes
-  void _paco(Canvas c, double s, {Skin? skin, bool? muerto}) {
+  void _paco(Canvas c, double s) {
     final p = motor.paco;
-    final caido = muerto ?? motor.estado == Estado.muerto;
     if (motor.invencible > 0 && (motor.t * 12).floor().isEven &&
-        motor.estado == Estado.jugando && !caido) {
+        motor.estado == Estado.jugando) {
       return;
     }
+    final muerto = motor.estado == Estado.muerto;
     final dir = motor.dirPaco.toDouble();
     c.save();
     c.translate((p.x + p.w / 2) * s, (p.y + p.h) * s);
-    if (caido) {
+    if (muerto) {
       c.translate(0, -p.h * s / 2);
       c.rotate(pi);
       c.translate(0, p.h * s / 2);
     }
     c.scale(dir, 1);
     final u = s; // una casilla
-    skin ??= Progreso.skin;
+    final skin = Progreso.skin;
     final naranja = Paint()..color = skin.cuerpo;
     final oscuro = Paint()..color = skin.oscuro;
     final crema = Paint()..color = skin.crema;
@@ -706,7 +832,7 @@ class PintorJuego extends CustomPainter {
     }
     c.drawOval(Rect.fromCenter(center: cab + Offset(u * 0.12, u * 0.1), width: u * 0.3, height: u * 0.2),
         skin.puntas ? oscuro : crema);
-    if (caido) {
+    if (muerto) {
       final x = Paint()
         ..color = negro.color
         ..strokeWidth = u * 0.05;
@@ -1409,7 +1535,7 @@ class PintorJuego extends CustomPainter {
               ..style = PaintingStyle.stroke
               ..strokeWidth = s * 0.05);
       case TipoProyectil.gota:
-        final color = motor.nivel.tema.liquido ?? const Color(0xFF4FA8F0);
+        final color = motor.tema.liquido ?? const Color(0xFF4FA8F0);
         c.drawPath(
             Path()
               ..moveTo(0, -r)
@@ -1488,7 +1614,7 @@ class PintorJuego extends CustomPainter {
         c.scale(p.vx >= 0 ? -1 : 1, 1);
         _pescado(c, Offset.zero, r * 0.9, Paint()..color = const Color(0xFF7FB3D9), Paint()..color = const Color(0xFF4A86B8));
       case TipoProyectil.onda:
-        final color = Color.lerp(motor.nivel.tema.cesped, Colors.white, 0.4)!;
+        final color = Color.lerp(motor.tema.cesped, Colors.white, 0.4)!;
         c.drawArc(Rect.fromCenter(center: Offset(0, s * 0.3), width: s * 0.9, height: s * 1.2), pi, pi, true,
             Paint()..color = color.withValues(alpha: 0.85));
     }
@@ -1497,4 +1623,111 @@ class PintorJuego extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant PintorJuego old) => old.motor != motor;
+}
+
+/// Un gato grande bailando tecktonik en el cielo de fondo (y en el menú).
+/// Mueve los brazos rectos de pose en pose, rápido, al ritmo.
+void gatoBailando(Canvas c, Size size, double t, Tema tema,
+    {double donde = 0.7, double alfa = 0.4}) {
+  final color = Color.lerp(tema.cieloArriba, Colors.white, 0.6)!;
+  // Se dibuja opaco en una capa y la capa entera sale transparente
+  c.saveLayer(Offset.zero & size, Paint()..color = Colors.black.withValues(alpha: alfa));
+  final h = size.height * 0.6;
+  final u = h / 10;
+  final cx = size.width * donde;
+  const pulsos = 2.2; // golpes por segundo
+  final golpe = t * pulsos;
+  final bote = (sin(golpe * pi)).abs() * u * 0.35;
+  final pies = size.height * 0.95 - bote;
+  final cadera = Offset(cx, pies - 3.6 * u);
+  final cuello = Offset(cx + sin(golpe * pi) * u * 0.15, pies - 6.8 * u);
+  final trazo = Paint()
+    ..color = color
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+
+  // Poses de brazos: (hombro, codo) en grados para el brazo derecho y el
+  // izquierdo. 0 = hacia fuera, negativo = hacia arriba.
+  const poses = [
+    [-55.0, 0.0, 160.0, -150.0],
+    [0.0, -90.0, 80.0, 10.0],
+    [160.0, -150.0, -55.0, 0.0],
+    [80.0, 10.0, 0.0, -90.0],
+    [-90.0, 0.0, -90.0, 0.0],
+    [30.0, -120.0, 30.0, -120.0],
+  ];
+  final i = golpe.floor();
+  final k = golpe - i;
+  final suave = k < 0.35 ? (k / 0.35) * (k / 0.35) * (3 - 2 * k / 0.35) : 1.0;
+  final a = poses[i % poses.length];
+  final b = poses[(i + 1) % poses.length];
+  double ang(int n) => (a[n] + (b[n] - a[n]) * suave) * pi / 180;
+
+  void brazo(double lado, double hombroA, double codoA) {
+    final hombro = cuello + Offset(lado * u * 0.75, u * 0.35);
+    final a1 = lado > 0 ? hombroA : pi - hombroA;
+    final a2 = lado > 0 ? hombroA + codoA : pi - hombroA - codoA;
+    final codo = hombro + Offset(cos(a1), sin(a1)) * u * 1.7;
+    final mano = codo + Offset(cos(a2), sin(a2)) * u * 1.6;
+    c.drawPath(
+        Path()
+          ..moveTo(hombro.dx, hombro.dy)
+          ..lineTo(codo.dx, codo.dy)
+          ..lineTo(mano.dx, mano.dy),
+        trazo..strokeWidth = u * 0.7);
+    c.drawCircle(mano, u * 0.4, Paint()..color = color);
+  }
+
+  // Cola que se mueve al ritmo
+  c.drawPath(
+      Path()
+        ..moveTo(cadera.dx - u * 0.5, cadera.dy)
+        ..quadraticBezierTo(cadera.dx - u * 2.6, cadera.dy - u * 0.5 + sin(golpe * pi) * u,
+            cadera.dx - u * 2.2, cadera.dy - u * 2.6),
+      trazo..strokeWidth = u * 0.55);
+  // Piernas: se abren y una se levanta en cada golpe
+  final pierna = i.isEven ? 1.0 : -1.0;
+  for (final lado in [-1.0, 1.0]) {
+    final sube = lado == pierna ? (1 - suave) * u * 0.9 : 0.0;
+    final rodilla = cadera + Offset(lado * u * 1.0, u * 1.8 - sube);
+    final pie = Offset(cx + lado * u * 1.5, pies - sube * 1.4);
+    c.drawPath(
+        Path()
+          ..moveTo(cadera.dx + lado * u * 0.4, cadera.dy)
+          ..lineTo(rodilla.dx, rodilla.dy)
+          ..lineTo(pie.dx, pie.dy),
+        trazo..strokeWidth = u * 0.8);
+    c.drawOval(
+        Rect.fromCenter(center: pie + Offset(lado * u * 0.3, 0), width: u * 1.0, height: u * 0.5),
+        Paint()..color = color);
+  }
+  // Cuerpo
+  c.drawLine(cadera, cuello + Offset(0, u * 0.3), trazo..strokeWidth = u * 1.9);
+  // Brazos
+  brazo(1, ang(0), ang(1));
+  brazo(-1, ang(2), ang(3));
+  // Cabeza con orejas
+  final cabeza = cuello + Offset(0, -u * 1.15);
+  final relleno = Paint()..color = color;
+  c.drawCircle(cabeza, u * 1.25, relleno);
+  for (final lado in [-1.0, 1.0]) {
+    c.drawPath(
+        Path()
+          ..moveTo(cabeza.dx + lado * u * 0.35, cabeza.dy - u * 1.0)
+          ..lineTo(cabeza.dx + lado * u * 1.1, cabeza.dy - u * 2.1)
+          ..lineTo(cabeza.dx + lado * u * 1.25, cabeza.dy - u * 0.4)
+          ..close(),
+        relleno);
+  }
+  // Gafas de sol, como buen bailarín
+  final gafas = Paint()..color = Color.lerp(color, Colors.black, 0.55)!;
+  for (final lado in [-1.0, 1.0]) {
+    c.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromCenter(center: cabeza + Offset(lado * u * 0.48, -u * 0.1), width: u * 0.8, height: u * 0.45),
+            Radius.circular(u * 0.15)),
+        gafas);
+  }
+  c.restore();
 }

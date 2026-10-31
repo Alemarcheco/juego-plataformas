@@ -232,7 +232,21 @@ class PonerCasilla extends Herramienta {
 
 class PonerEnemigo extends Herramienta {
   final TipoEnemigo tipo;
-  const PonerEnemigo(this.tipo);
+  final bool gigante;
+  const PonerEnemigo(this.tipo, {this.gigante = false});
+}
+
+/// Pone el jefe del nivel (solo puede haber uno).
+class PonerJefe extends Herramienta {
+  final Jefe jefe;
+  const PonerJefe(this.jefe);
+}
+
+/// Pone un cambio de velocidad, fondo, música o agua en una columna.
+class PonerDisparador extends Herramienta {
+  final TipoDisparador tipo;
+  final String valor;
+  const PonerDisparador(this.tipo, this.valor);
 }
 
 enum Marca { inicio, control, meta }
@@ -269,15 +283,39 @@ class _PantallaEditorState extends State<PantallaEditor> {
   Timer? _guardado;
   (int, int)? _ultima;
 
-  static const pestanas = ['Bloques', 'Objetos', 'Enemigos', 'Paco y banderas'];
+  static const pestanas = [
+    'Bloques',
+    'Objetos',
+    'Enemigos',
+    'Gigantes',
+    'Jefes',
+    'Cambios',
+    'Paco y banderas',
+  ];
 
   static const bloques = [
     Casilla.tierra,
     Casilla.ladrillo,
+    Casilla.coral,
     Casilla.pinchos,
     Casilla.liquido,
   ];
-  static const objetos = [Casilla.moneda, Casilla.corazon];
+  static const objetos = [
+    Casilla.moneda,
+    Casilla.corazon,
+    Casilla.portalAzul,
+    Casilla.portalNaranja,
+  ];
+
+  /// Enemigos que pueden ser gigantes.
+  static final gigantes = [
+    for (final t in TipoEnemigo.values)
+      if (t != TipoEnemigo.fuego) t
+  ];
+
+  /// Fondo y música que se eligen para los cambios de fondo y de música.
+  String temaCambio = 'nieve';
+  String musicaCambio = 'lava';
 
   @override
   void initState() {
@@ -331,7 +369,9 @@ class _PantallaEditorState extends State<PantallaEditor> {
     var y = (p.dy / s + camY).floor();
     if (x < 0 || x >= n.ancho || y < 0 || y >= Mapa.alto) return;
     // Enemigos, Paco y banderas se ponen encima del suelo, sin romperlo
-    if (herramienta is PonerEnemigo || herramienta is PonerMarca) {
+    if (herramienta is PonerEnemigo ||
+        herramienta is PonerMarca ||
+        herramienta is PonerJefe) {
       while (y > 0 && esSolida(n.casillas[x][y])) {
         y--;
       }
@@ -342,12 +382,21 @@ class _PantallaEditorState extends State<PantallaEditor> {
       case PonerCasilla(:final casilla):
         n.casillas[x][y] = casilla;
         _quitarEnemigo(x, y);
-      case PonerEnemigo(:final tipo):
+      case PonerEnemigo(:final tipo, :final gigante):
         _quitarEnemigo(x, y);
         if (n.casillas[x][y] != Casilla.liquido) n.casillas[x][y] = Casilla.vacio;
         // Los de suelo se apoyan en el fondo de la casilla
-        n.enemigos.add(
-            Aparicion(tipo, x + 0.03, _flota(tipo) ? y + 0.15 : y + 1.0));
+        n.enemigos.add(Aparicion(tipo, x + 0.03, _flota(tipo) ? y + 0.15 : y + 1.0,
+            gigante: gigante));
+      case PonerJefe(:final jefe):
+        // Solo un jefe por nivel: el nuevo sustituye al anterior
+        n.casillas[x][y] = Casilla.vacio;
+        n.jefe = jefe.nombre;
+        n.jefeX = x;
+        n.jefeY = y;
+      case PonerDisparador(:final tipo, :final valor):
+        n.disparadores.removeWhere((d) => d.x == x && d.tipo == tipo);
+        n.disparadores.add(Disparador(tipo, x, valor));
       case PonerMarca(:final marca):
         if (esSolida(n.casillas[x][y])) n.casillas[x][y] = Casilla.vacio;
         switch (marca) {
@@ -364,6 +413,11 @@ class _PantallaEditorState extends State<PantallaEditor> {
       case Borrar():
         n.casillas[x][y] = Casilla.vacio;
         _quitarEnemigo(x, y);
+        n.disparadores.removeWhere(
+            (d) => d.x == x && d.tipo.index == y - camY.floor());
+        if (n.jefe != null && (n.jefeX - x).abs() <= 1 && y <= n.jefeY && y >= n.jefeY - 2) {
+          n.jefe = null;
+        }
         if (n.controlX == x && n.controlY == y) n.controlX = n.controlY = null;
     }
     _cambio();
@@ -403,7 +457,15 @@ class _PantallaEditorState extends State<PantallaEditor> {
   }
 
   Future<void> _elegirFondo() async {
-    final tema = await showDialog<String>(
+    final tema = await _dialogoFondo(n.tema);
+    if (tema != null) {
+      n.tema = tema;
+      _cambio();
+    }
+  }
+
+  Future<String?> _dialogoFondo(String actual) {
+    return showDialog<String>(
       context: context,
       builder: (c) => SimpleDialog(
         title: const Text('Fondo'),
@@ -425,7 +487,7 @@ class _PantallaEditorState extends State<PantallaEditor> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: key == n.tema
+                            color: key == actual
                                 ? const Color(0xFFF59A33)
                                 : Colors.white24,
                             width: 2),
@@ -464,14 +526,19 @@ class _PantallaEditorState extends State<PantallaEditor> {
         ],
       ),
     );
-    if (tema != null) {
-      n.tema = tema;
+  }
+
+  Future<void> _elegirMusica() async {
+    final musica = await _dialogoMusica(n.musica);
+    if (musica != null) {
+      n.musica = musica;
+      Sonido.musica(musica);
       _cambio();
     }
   }
 
-  Future<void> _elegirMusica() async {
-    final musica = await showDialog<String>(
+  Future<String?> _dialogoMusica(String actual) {
+    return showDialog<String>(
       context: context,
       builder: (c) => SimpleDialog(
         title: const Text('Música'),
@@ -482,10 +549,10 @@ class _PantallaEditorState extends State<PantallaEditor> {
               child: Row(
                 children: [
                   Icon(
-                      key == n.musica
+                      key == actual
                           ? Icons.music_note_rounded
                           : Icons.music_note_outlined,
-                      color: key == n.musica ? const Color(0xFFF59A33) : null),
+                      color: key == actual ? const Color(0xFFF59A33) : null),
                   const SizedBox(width: 10),
                   Text(value, style: const TextStyle(fontSize: 17)),
                 ],
@@ -494,11 +561,6 @@ class _PantallaEditorState extends State<PantallaEditor> {
         ],
       ),
     );
-    if (musica != null) {
-      n.musica = musica;
-      Sonido.musica(musica);
-      _cambio();
-    }
   }
 
   Future<void> _elegirLargo() async {
@@ -695,7 +757,44 @@ class _PantallaEditorState extends State<PantallaEditor> {
         for (final c in objetos) (PonerCasilla(c), _IconoCasilla(c, n)),
       if (pestana == 2)
         for (final t in TipoEnemigo.values) (PonerEnemigo(t), _IconoEnemigo(t)),
-      if (pestana == 3) ...[
+      if (pestana == 3 && Progreso.gigantes)
+        for (final t in gigantes)
+          (PonerEnemigo(t, gigante: true), _IconoEnemigo(t, gigante: true)),
+      if (pestana == 4)
+        for (final (j, nivel) in jefesDelJuego)
+          if (Progreso.jefeVencido(nivel)) (PonerJefe(j), _IconoJefe(j)),
+      if (pestana == 5) ...[
+        for (final (v, texto) in [
+          ('lento', 'Lento'),
+          ('normal', 'Normal'),
+          ('rapido', 'Rápido'),
+          ('superRapido', 'Súper rápido'),
+        ])
+          (
+            PonerDisparador(TipoDisparador.velocidad, v),
+            _IconoDisparador(TipoDisparador.velocidad, texto)
+          ),
+        (
+          PonerDisparador(TipoDisparador.fondo, temaCambio),
+          _IconoDisparador(TipoDisparador.fondo,
+              Temas.todos[temaCambio]?.nombre ?? temaCambio)
+        ),
+        (
+          PonerDisparador(TipoDisparador.musica, musicaCambio),
+          _IconoDisparador(TipoDisparador.musica, musicas[musicaCambio] ?? '')
+        ),
+        for (final (v, texto) in [
+          ('2', 'Agua alta'),
+          ('7', 'Agua media'),
+          ('11', 'Agua baja'),
+          ('99', 'Sin agua'),
+        ])
+          (
+            PonerDisparador(TipoDisparador.agua, v),
+            _IconoDisparador(TipoDisparador.agua, texto)
+          ),
+      ],
+      if (pestana == 6) ...[
         (const PonerMarca(Marca.inicio), const _IconoMarca(Marca.inicio)),
         (const PonerMarca(Marca.control), const _IconoMarca(Marca.control)),
         (const PonerMarca(Marca.meta), const _IconoMarca(Marca.meta)),
@@ -732,6 +831,7 @@ class _PantallaEditorState extends State<PantallaEditor> {
                     children: [
                       for (final (h, icono) in items)
                         _casillaPaleta(h, icono),
+                      ..._bloqueados(),
                     ],
                   ),
                 ),
@@ -751,9 +851,101 @@ class _PantallaEditorState extends State<PantallaEditor> {
     );
   }
 
+  /// Lo que todavía no se puede usar, con lo que hay que hacer para tenerlo.
+  List<Widget> _bloqueados() {
+    Widget aviso(String texto, {double ancho = 300}) => Container(
+          width: ancho,
+          margin: const EdgeInsets.only(right: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF26354A),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.lock_rounded, size: 22, color: Colors.white54),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(texto,
+                    maxLines: 2,
+                    style: const TextStyle(fontSize: 13, color: Colors.white70)),
+              ),
+            ],
+          ),
+        );
+    if (pestana == 3 && !Progreso.gigantes) {
+      return [aviso('Supera el mundo gigante (mundo secreto) para poner perros gigantes.', ancho: 420)];
+    }
+    if (pestana == 4) {
+      return [
+        if (n.jefe != null)
+          aviso('Solo puede haber un jefe por nivel: si pones otro, cambia el que hay.', ancho: 330),
+        for (final (j, nivel) in jefesDelJuego)
+          if (!Progreso.jefeVencido(nivel))
+            Tooltip(
+              message: nivel.miniJefe != null
+                  ? 'Vence al ${j.nombre} y completa el nivel secreto del 3-3'
+                  : 'Vence al ${j.nombre} en el ${nivel.mundo}-${nivel.numero}',
+              triggerMode: TooltipTriggerMode.tap,
+              child: aviso(
+                  nivel.miniJefe != null ? '${j.nombre}: nivel secreto del 3-3' : '${j.nombre}: ${nivel.mundo}-${nivel.numero}',
+                  ancho: 150),
+            ),
+      ];
+    }
+    if (pestana == 5) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: OutlinedButton.icon(
+            onPressed: _elegirTemaCambio,
+            icon: const Icon(Icons.landscape_rounded),
+            label: const Text('Elegir fondo'),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: OutlinedButton.icon(
+            onPressed: _elegirMusicaCambio,
+            icon: const Icon(Icons.music_note_rounded),
+            label: const Text('Elegir música'),
+          ),
+        ),
+      ];
+    }
+    return const [];
+  }
+
+  Future<void> _elegirTemaCambio() async {
+    final t = await _dialogoFondo(temaCambio);
+    if (t != null) {
+      setState(() {
+        temaCambio = t;
+        herramienta = PonerDisparador(TipoDisparador.fondo, t);
+      });
+    }
+  }
+
+  Future<void> _elegirMusicaCambio() async {
+    final m = await _dialogoMusica(musicaCambio);
+    if (m != null) {
+      Sonido.musica(n.musica);
+      setState(() {
+        musicaCambio = m;
+        herramienta = PonerDisparador(TipoDisparador.musica, m);
+      });
+    }
+  }
+
   bool _elegida(Herramienta h) => switch ((h, herramienta)) {
         (PonerCasilla(casilla: final a), PonerCasilla(casilla: final b)) => a == b,
-        (PonerEnemigo(tipo: final a), PonerEnemigo(tipo: final b)) => a == b,
+        (PonerEnemigo(tipo: final a, gigante: final ga),
+              PonerEnemigo(tipo: final b, gigante: final gb)) =>
+          a == b && ga == gb,
+        (PonerJefe(jefe: final a), PonerJefe(jefe: final b)) => a == b,
+        (PonerDisparador(tipo: final a, valor: final va),
+              PonerDisparador(tipo: final b, valor: final vb)) =>
+          a == b && va == vb,
         (PonerMarca(marca: final a), PonerMarca(marca: final b)) => a == b,
         (Borrar(), Borrar()) => true,
         _ => false,
@@ -803,6 +995,34 @@ class _VistaEditor extends CustomPainter {
     for (var y = 0.0; y <= alto + 0.5; y += s) {
       c.drawLine(Offset(0, y), Offset(size.width, y), linea);
     }
+    // Cambios (velocidad, fondo, música, agua): una raya en su columna y
+    // un cartelito en la fila de su tipo
+    for (final d in e.n.disparadores) {
+      final x = (d.x - motor.camX) * s;
+      if (x < -s || x > size.width) continue;
+      final color = _IconoDisparador.colores[d.tipo]!;
+      c.drawLine(Offset(x + s / 2, 0), Offset(x + s / 2, alto),
+          Paint()
+            ..color = color.withValues(alpha: 0.6)
+            ..strokeWidth = 3);
+      // El cartel va arriba de lo que se ve, para que siempre se vea
+      final fila = e.camY.floor() + d.tipo.index;
+      final r = Rect.fromLTWH(x + 2, fila * s + 2, s - 4, s - 4);
+      c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(6)),
+          Paint()..color = color);
+      final icono = _IconoDisparador.iconos[d.tipo]!;
+      final tp = TextPainter(
+        text: TextSpan(
+            text: String.fromCharCode(icono.codePoint),
+            style: TextStyle(
+                fontSize: s * 0.7,
+                fontFamily: icono.fontFamily,
+                package: icono.fontPackage,
+                color: Colors.white)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(c, r.center - Offset(tp.width / 2, tp.height / 2));
+    }
     // Más allá del final del nivel
     final fin = (motor.mapa.ancho - motor.camX) * s;
     if (fin < size.width) {
@@ -819,15 +1039,19 @@ class _VistaEditor extends CustomPainter {
 /// Pinta una casilla o un enemigo como en el juego, para la paleta.
 class _Muestra extends CustomPainter {
   final Motor motor;
-  _Muestra(this.motor);
+
+  /// Casillas que se ven de alto (los gigantes y los jefes necesitan más).
+  final double zoom;
+  _Muestra(this.motor, {this.zoom = 1.5});
 
   @override
   void paint(Canvas c, Size size) {
     // La muestra está en la casilla (1, 1); se dibuja el nivel entero a una
     // escala en la que esa casilla llena el cuadro.
-    final s = size.height / 1.5;
+    final s = size.height / zoom;
     c.save();
-    c.translate(-s * 0.75 + (size.width - s * 1.5) / 2, -s * 0.6);
+    c.translate(-s * (1.5 - zoom / 2) + (size.width - s * zoom) / 2,
+        -s * (2.1 - zoom));
     PintorJuego(motor, ValueNotifier(0))
         .paint(c, Size(s * Mapa.alto * 2, s * Mapa.alto));
     c.restore();
@@ -837,17 +1061,28 @@ class _Muestra extends CustomPainter {
   bool shouldRepaint(covariant _Muestra old) => old.motor != motor;
 }
 
-Motor _motorMuestra(Tema tema, {Casilla? casilla, TipoEnemigo? enemigo}) {
+Motor _motorMuestra(Tema tema,
+    {Casilla? casilla, TipoEnemigo? enemigo, bool gigante = false, Jefe? jefe}) {
   final agua = enemigo != null && enemigo.name.startsWith('pez');
   final nivel = Nivel(1, 1, agua ? TipoNivel.agua : TipoNivel.suelo,
       agua ? Temas.marino : tema,
-      creado: '');
+      creado: '', jefe: jefe);
   Mapa crear() {
     final m = Mapa(6);
     if (casilla != null) m.casillas[1][1] = casilla;
     if (enemigo != null) {
-      m.enemigos.add(Aparicion(enemigo, 1.05,
-          enemigo == TipoEnemigo.volador || enemigo == TipoEnemigo.fuego || agua ? 1.2 : 2.0));
+      m.enemigos.add(Aparicion(
+          enemigo,
+          gigante ? 0.7 : 1.05,
+          enemigo == TipoEnemigo.volador || enemigo == TipoEnemigo.fuego || agua
+              ? 1.2
+              : 2.0,
+          gigante: gigante));
+    }
+    if (jefe != null) {
+      m.arenaX = -5;
+      m.jefeX = 1;
+      m.sueloArena = 2.05;
     }
     m.inicioX = 50; // Paco fuera de la vista
     return m;
@@ -874,12 +1109,64 @@ class _IconoCasilla extends StatelessWidget {
 
 class _IconoEnemigo extends StatelessWidget {
   final TipoEnemigo tipo;
-  const _IconoEnemigo(this.tipo);
+  final bool gigante;
+  const _IconoEnemigo(this.tipo, {this.gigante = false});
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-      painter: _Muestra(_motorMuestra(Temas.planicie, enemigo: tipo)),
+      painter: _Muestra(
+          _motorMuestra(Temas.planicie, enemigo: tipo, gigante: gigante),
+          zoom: gigante ? 2.2 : 1.5),
       size: Size.infinite);
+}
+
+class _IconoJefe extends StatelessWidget {
+  final Jefe jefe;
+  const _IconoJefe(this.jefe);
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: jefe.nombre,
+        child: CustomPaint(
+            painter: _Muestra(_motorMuestra(Temas.castillo, jefe: jefe),
+                zoom: 2.4 * jefe.tamano.clamp(0.75, 1.0)),
+            size: Size.infinite),
+      );
+}
+
+class _IconoDisparador extends StatelessWidget {
+  final TipoDisparador tipo;
+  final String texto;
+  const _IconoDisparador(this.tipo, this.texto);
+
+  static const colores = {
+    TipoDisparador.velocidad: Color(0xFFE0457B),
+    TipoDisparador.fondo: Color(0xFF3FAE5A),
+    TipoDisparador.musica: Color(0xFF9B5CFF),
+    TipoDisparador.agua: Color(0xFF2A7FC0),
+  };
+  static const iconos = {
+    TipoDisparador.velocidad: Icons.speed_rounded,
+    TipoDisparador.fondo: Icons.landscape_rounded,
+    TipoDisparador.musica: Icons.music_note_rounded,
+    TipoDisparador.agua: Icons.waves_rounded,
+  };
+
+  @override
+  Widget build(BuildContext context) => Container(
+        color: colores[tipo]!.withValues(alpha: 0.35),
+        padding: const EdgeInsets.all(3),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(iconos[tipo], size: 22),
+            Text(texto,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+          ],
+        ),
+      );
 }
 
 class _IconoMarca extends StatelessWidget {

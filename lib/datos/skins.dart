@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Detalle extra que llevan los trajes de premio.
-enum Adorno { ninguno, llamas, acido, brillo, hongo }
+enum Adorno { ninguno, llamas, acido, brillo, hongo, hielo, angel, resorte, espinas, arcoiris }
 
 /// Un traje (color de pelo) para Paco.
 class Skin {
@@ -84,4 +84,39 @@ const List<Skin> skins = [
       crema: Color(0xFFFFFFFF),
       adorno: Adorno.hongo,
       logro: 'hongo'),
+  Skin('hielo', 'Gato de hielo', 0,
+      cuerpo: Color(0xFFBFE8FF),
+      oscuro: Color(0xFF6FB8E8),
+      crema: Color(0xFFF2FBFF),
+      ojos: Color(0xFF1F6FBF),
+      adorno: Adorno.hielo,
+      logro: 'hielo'),
+  Skin('angel', 'Gato ángel', 0,
+      cuerpo: Color(0xFFFFFFFF),
+      oscuro: Color(0xFFE8E2F0),
+      crema: Color(0xFFFFF8E8),
+      ojos: Color(0xFF6FA8FF),
+      adorno: Adorno.angel,
+      logro: 'angel'),
+  Skin('resorte', 'Gato resorte', 0,
+      cuerpo: Color(0xFF9AD94A),
+      oscuro: Color(0xFF5C9A22),
+      crema: Color(0xFFE6F7C8),
+      ojos: Color(0xFF1F2A3A),
+      adorno: Adorno.resorte,
+      logro: 'resorte'),
+  Skin('espinas', 'Gato de espinas', 0,
+      cuerpo: Color(0xFF2FA89A),
+      oscuro: Color(0xFF1C6E64),
+      crema: Color(0xFFBFEDE6),
+      ojos: Color(0xFFFF8A1F),
+      adorno: Adorno.espinas,
+      logro: 'espinas'),
+  Skin('arcoiris', 'Gato arcoíris', 0,
+      cuerpo: Color(0xFFFF8FC8),
+      oscuro: Color(0xFF8A5CFF),
+      crema: Color(0xFFFFF27A),
+      ojos: Color(0xFF1F2A3A),
+      adorno: Adorno.arcoiris,
+      logro: 'arcoiris'),
 ];

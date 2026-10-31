@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -24,6 +25,13 @@ class NivelCreado {
   int? controlX, controlY;
   int metaX, metaY;
 
+  /// Jefe del nivel (solo uno) por su nombre, y la casilla donde está.
+  String? jefe;
+  int jefeX = 0, jefeY = 0;
+
+  /// Cambios de velocidad, fondo, música y agua al pasar por una columna.
+  List<Disparador> disparadores;
+
   NivelCreado({
     required this.id,
     required this.nombre,
@@ -39,7 +47,11 @@ class NivelCreado {
     this.controlY,
     required this.metaX,
     required this.metaY,
-  });
+    this.jefe,
+    this.jefeX = 0,
+    this.jefeY = 0,
+    List<Disparador>? disparadores,
+  }) : disparadores = disparadores ?? [];
 
   /// Nivel nuevo: suelo plano de punta a punta, Paco a la izquierda y la
   /// meta a la derecha.
@@ -64,9 +76,16 @@ class NivelCreado {
 
   Tema get temaElegido => Temas.todos[tema] ?? Temas.planicie;
 
+  Jefe? get datosJefe {
+    for (final (j, _) in jefesDelJuego) {
+      if (j.nombre == jefe) return j;
+    }
+    return null;
+  }
+
   Nivel get nivel => Nivel(1, 1, agua ? TipoNivel.agua : TipoNivel.suelo,
       temaElegido,
-      creado: nombre);
+      creado: nombre, jefe: datosJefe);
 
   /// Mapa para jugarlo (una copia nueva cada vez, porque se comen los pescados).
   Mapa mapa() {
@@ -85,6 +104,15 @@ class NivelCreado {
       m.controlX = controlX!.toDouble();
       m.controlY = controlY! + 1;
     }
+    if (datosJefe != null) {
+      // La pelea es alrededor del jefe: la puerta se cierra a su izquierda
+      m.jefeX = jefeX.toDouble();
+      m.sueloArena = jefeY + 1.0;
+      m.arenaX = max(2.0, jefeX - 10.0);
+      m.arenaFin = min(ancho - 2.0, jefeX + 9.0);
+      m.metaX = ancho + 10.0;
+    }
+    m.disparadores.addAll(disparadores);
     return m;
   }
 
@@ -103,6 +131,8 @@ class NivelCreado {
     } else {
       casillas.removeRange(nuevo, ancho);
       enemigos.removeWhere((e) => e.x >= nuevo);
+      disparadores.removeWhere((d) => d.x >= nuevo);
+      if (jefeX >= nuevo) jefe = null;
     }
     ancho = nuevo;
     inicioX = inicioX.clamp(0, ancho - 1);
@@ -123,7 +153,11 @@ class NivelCreado {
             String.fromCharCodes(col.map((c) => 97 + c.index))
         ],
         'enemigos': [
-          for (final e in enemigos) [e.tipo.name, e.x, e.y]
+          for (final e in enemigos) [e.tipo.name, e.x, e.y, if (e.gigante) 1]
+        ],
+        'jefe': jefe == null ? null : [jefe, jefeX, jefeY],
+        'disparadores': [
+          for (final d in disparadores) [d.tipo.name, d.x, d.valor]
         ],
         'inicio': [inicioX, inicioY],
         'control': controlX == null ? null : [controlX, controlY],
@@ -134,6 +168,7 @@ class NivelCreado {
     final inicio = (j['inicio'] as List).cast<int>();
     final meta = (j['meta'] as List).cast<int>();
     final control = (j['control'] as List?)?.cast<int>();
+    final jefe = j['jefe'] as List?;
     return NivelCreado(
       id: j['id'] as String,
       nombre: j['nombre'] as String,
@@ -152,7 +187,17 @@ class NivelCreado {
         for (final e in (j['enemigos'] as List).cast<List>())
           if (TipoEnemigo.values.any((t) => t.name == e[0]))
             Aparicion(TipoEnemigo.values.byName(e[0] as String),
-                (e[1] as num).toDouble(), (e[2] as num).toDouble())
+                (e[1] as num).toDouble(), (e[2] as num).toDouble(),
+                gigante: e.length > 3 && e[3] == 1)
+      ],
+      jefe: jefe?[0] as String?,
+      jefeX: (jefe?[1] as int?) ?? 0,
+      jefeY: (jefe?[2] as int?) ?? 0,
+      disparadores: [
+        for (final d in (j['disparadores'] as List? ?? const []).cast<List>())
+          if (TipoDisparador.values.any((t) => t.name == d[0]))
+            Disparador(TipoDisparador.values.byName(d[0] as String),
+                d[1] as int, d[2] as String)
       ],
       inicioX: inicio[0],
       inicioY: inicio[1],

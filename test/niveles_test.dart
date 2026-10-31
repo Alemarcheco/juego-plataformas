@@ -100,9 +100,9 @@ import 'package:paco_aventuras/juego/motor.dart';
 }
 
 void main() {
-  test('Hay 80 niveles y 4 secretos', () {
-    expect(todosLosNiveles.length, 84);
-    for (var i = 0; i < 84; i++) {
+  test('Hay 80 niveles, 4 secretos y el nivel secreto del 3-3', () {
+    expect(todosLosNiveles.length, 85);
+    for (var i = 0; i < 85; i++) {
       expect(todosLosNiveles[i].indice, i);
     }
   });

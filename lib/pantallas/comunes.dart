@@ -100,6 +100,63 @@ class _CaraPaco extends CustomPainter {
         c.drawCircle(o(26, 18), 4.5 * u, punto);
         c.drawCircle(o(42, 13), 5 * u, punto);
         c.drawCircle(o(56, 20), 4 * u, punto);
+      case Adorno.hielo:
+        final hielo = Paint()..color = const Color(0xFFE8F8FF);
+        final borde = Paint()
+          ..color = const Color(0xFF6FB8E8)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2 * u;
+        for (final (x, alto) in [(30.0, 14.0), (40.0, 20.0), (50.0, 13.0)]) {
+          final p = Path()
+            ..moveTo((x - 4) * u, 26 * u)
+            ..lineTo(x * u, (26 - alto) * u)
+            ..lineTo((x + 4) * u, 26 * u)
+            ..close();
+          c.drawPath(p, hielo);
+          c.drawPath(p, borde);
+        }
+      case Adorno.angel:
+        c.drawOval(Rect.fromCenter(center: o(40, 9), width: 30 * u, height: 8 * u),
+            Paint()
+              ..color = const Color(0xFFFFD23F)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 3 * u);
+      case Adorno.resorte:
+        final muelle = Paint()
+          ..color = const Color(0xFFB8BCC8)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2 * u;
+        final zig = Path()..moveTo(40 * u, 24 * u);
+        for (var k = 1; k <= 6; k++) {
+          zig.lineTo((40 + (k.isEven ? -4 : 4)) * u, (24 - k * 2.6) * u);
+        }
+        c.drawPath(zig, muelle);
+        c.drawCircle(o(40, 6), 4 * u, Paint()..color = const Color(0xFFFF4D6D));
+      case Adorno.espinas:
+        final espina = Paint()..color = const Color(0xFFFF8A1F);
+        for (final x in [28.0, 40.0, 52.0]) {
+          c.drawPath(
+              Path()
+                ..moveTo((x - 5) * u, 25 * u)
+                ..lineTo(x * u, 8 * u)
+                ..lineTo((x + 5) * u, 25 * u)
+                ..close(),
+              espina);
+        }
+      case Adorno.arcoiris:
+        const colores = [
+          Color(0xFFFF4D4D), Color(0xFFFF9F1C), Color(0xFFFFE14A),
+          Color(0xFF4CD964), Color(0xFF3FA8FF), Color(0xFF9B5CFF),
+        ];
+        for (var k = 0; k < colores.length; k++) {
+          c.drawArc(
+              Rect.fromCenter(center: o(40, 30), width: (74 - k * 6) * u, height: (52 - k * 6) * u),
+              pi, pi, false,
+              Paint()
+                ..color = colores[k]
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 3 * u);
+        }
     }
   }
 
