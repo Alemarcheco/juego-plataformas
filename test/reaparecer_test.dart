@@ -9,7 +9,7 @@ void main() {
   for (final control in [false, true]) {
     test('Paco reaparece de pie ${control ? "en la bandera" : "al principio"}', () {
       final malos = <String>[];
-      for (final n in todosLosNiveles) {
+      for (final n in todosLosNiveles.where((n) => !n.bonus)) {
         final m = Motor(n);
         m.control = control;
         // Morir cayendo al vacío

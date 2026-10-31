@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../datos/mundos.dart';
 import '../progreso.dart';
+import 'inicio.dart';
 import 'juego.dart';
 import 'tienda.dart';
 
@@ -53,6 +54,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
                       style:
                           TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
                   const Spacer(),
+                  const BarraProgreso(ancho: 160),
+                  const SizedBox(width: 16),
                   const Icon(Icons.set_meal_rounded, color: Color(0xFFFFC93C)),
                   const SizedBox(width: 6),
                   Text(

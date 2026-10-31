@@ -59,13 +59,21 @@ class _PantallaJuegoState extends State<PantallaJuego>
     final estadoAntes = motor.estado;
     final jefeAntes = motor.jefe?.vidas;
     final cerradaAntes = motor.puertaCerrada;
+    final musicaAntes = motor.musica;
     motor.actualizar(dt);
+    if (motor.volver) {
+      // Se perdió en el nivel secreto del 3-3: de vuelta al 3-3
+      _cambiarNivel(todosLosNiveles.firstWhere((n) => n.miniJefe != null));
+      return;
+    }
     _cuadro.value++;
     for (final s in motor.sonidos) {
       Sonido.efecto(s);
     }
     motor.sonidos.clear();
-    if (motor.puertaCerrada != cerradaAntes) _ponerMusica();
+    if (motor.puertaCerrada != cerradaAntes || motor.musica != musicaAntes) {
+      _ponerMusica();
+    }
     if (motor.derrotados.isNotEmpty) {
       for (final t in motor.derrotados) {
         Progreso.contarDerrota(t.name).then(_avisarLogros);
@@ -85,10 +93,15 @@ class _PantallaJuegoState extends State<PantallaJuego>
       setState(() {});
     } else if (motor.terminado && !fin) {
       fin = true;
-      Progreso.completar(nivel.indice, motor.pescados)
-          .then((_) => Progreso.revisarLogros())
-          .then(_avisarLogros);
-      if (motor.secretoEncontrado) Progreso.abrirSecreto();
+      // Entrar al portal del 3-3 no cuenta como terminar el 3-3
+      if (!motor.secretoEncontrado || nivel.caminoSecreto && nivel.miniJefe == null) {
+        Progreso.completar(nivel.indice, motor.pescados)
+            .then((_) => Progreso.revisarLogros())
+            .then(_avisarLogros);
+      }
+      if (motor.secretoEncontrado && nivel.miniJefe == null) {
+        Progreso.abrirSecreto();
+      }
       setState(() {});
     }
   }
@@ -96,7 +109,9 @@ class _PantallaJuegoState extends State<PantallaJuego>
   /// La canción del nivel; en la pelea con el jefe, la del jefe.
   void _ponerMusica() {
     final jefe = motor.puertaCerrada && motor.jefe != null;
-    Sonido.musica(jefe ? 'jefe' : widget.creado?.musica ?? musicaDe(nivel));
+    Sonido.musica(jefe
+        ? 'jefe'
+        : motor.musica ?? widget.creado?.musica ?? musicaDe(nivel));
   }
 
   void _avisarLogros(List<Logro> nuevos) {
@@ -156,9 +171,12 @@ class _PantallaJuegoState extends State<PantallaJuego>
 
   Nivel? get _siguiente {
     if (widget.creado != null) return null;
-    if (motor.secretoEncontrado) return mundoSecreto.niveles.first;
+    if (motor.secretoEncontrado) {
+      return nivel.miniJefe != null ? nivelArcoiris : mundoSecreto.niveles.first;
+    }
+    if (nivel.bonus) return todosLosNiveles[19]; // el 3-4
     final i = nivel.indice + 1;
-    if (nivel.indice == 79 || i >= todosLosNiveles.length) return null;
+    if (nivel.indice == 79 || i >= Progreso.arcoiris) return null;
     return todosLosNiveles[i];
   }
 
@@ -218,7 +236,9 @@ class _PantallaJuegoState extends State<PantallaJuego>
               _texto('${motor.pescados}'),
               const Spacer(),
               _texto(nivel.creado ??
-                  'Mundo ${nivel.mundo}-${nivel.numero} · ${nivel.tema.nombre}'),
+                  (nivel.bonus
+                      ? 'Nivel secreto · ${nivel.tema.nombre}'
+                      : 'Mundo ${nivel.mundo}-${nivel.numero} · ${nivel.tema.nombre}')),
               const SizedBox(width: 8),
               _botonRedondo(Icons.pause_rounded, () {
                 setState(() => pausa = true);
@@ -389,7 +409,11 @@ class _PantallaJuegoState extends State<PantallaJuego>
     final ultimo = nivel.indice == 79;
     final jefe = motor.jefe;
     final titulo = motor.secretoEncontrado
-        ? '¡Encontraste el mundo secreto!'
+        ? nivel.miniJefe != null
+            ? '¡Encontraste un nivel secreto!'
+            : '¡Encontraste el mundo secreto!'
+        : nivel.bonus
+            ? '¡Superaste el nivel secreto!'
         : ultimo
             ? '¡Paco venció al Perro Supremo!'
             : jefe != null

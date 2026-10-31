@@ -17,9 +17,34 @@ enum Casilla {
 
   /// Puerta al mundo secreto.
   portal,
+
+  /// Coral (sólido), para el creador de niveles.
+  coral,
+
+  /// Portales del creador: se entra por uno y se sale por el otro del
+  /// mismo color.
+  portalAzul,
+  portalNaranja,
 }
 
-bool esSolida(Casilla c) => c == Casilla.tierra || c == Casilla.ladrillo;
+bool esSolida(Casilla c) =>
+    c == Casilla.tierra || c == Casilla.ladrillo || c == Casilla.coral;
+
+bool esPortalCreador(Casilla c) =>
+    c == Casilla.portalAzul || c == Casilla.portalNaranja;
+
+/// Cosas invisibles del creador que cambian algo al pasar por su columna.
+enum TipoDisparador { velocidad, fondo, musica, agua }
+
+class Disparador {
+  final TipoDisparador tipo;
+  final int x;
+
+  /// velocidad: 'lento', 'normal', 'rapido'; fondo: clave del tema;
+  /// musica: clave de la canción; agua: fila de la superficie ('99' = sin agua).
+  final String valor;
+  const Disparador(this.tipo, this.x, this.valor);
+}
 
 enum TipoEnemigo {
   perro,
@@ -57,7 +82,10 @@ class Aparicion {
   final TipoEnemigo tipo;
   final double x;
   final double y;
-  const Aparicion(this.tipo, this.x, this.y);
+
+  /// Perro gigante (como los del mundo secreto), para el creador.
+  final bool gigante;
+  const Aparicion(this.tipo, this.x, this.y, {this.gigante = false});
 }
 
 /// Un nivel ya construido: casillas, enemigos y meta.
@@ -79,6 +107,14 @@ class Mapa {
   /// Para niveles con jefe: dónde empieza la arena.
   double? arenaX;
   double sueloArena = 0;
+
+  /// Dónde acaba la arena (si no, al final del nivel) y dónde aparece el
+  /// jefe (en los niveles del creador).
+  double? arenaFin;
+  double? jefeX, jefeY;
+
+  /// Cambios de velocidad, fondo, música y agua (creador de niveles).
+  final List<Disparador> disparadores = [];
 
   Mapa(this.ancho)
       : casillas =
@@ -131,7 +167,9 @@ Mapa generarMapa(Nivel nivel) {
   switch (nivel.tipo) {
     case TipoNivel.suelo:
       final m = g.suelo();
-      return nivel.caminoSecreto ? _conCaminoSecreto(m) : m;
+      return nivel.caminoSecreto
+          ? _conCaminoSecreto(m, portal: nivel.miniJefe == null)
+          : m;
     case TipoNivel.cielo:
       return g.cielo();
     case TipoNivel.fortaleza:
@@ -144,8 +182,9 @@ Mapa generarMapa(Nivel nivel) {
 /// Ancho de la zona secreta escondida a la izquierda del inicio.
 const anchoSecreto = 16;
 
-/// Añade a la izquierda del inicio una pared falsa con el portal al mundo secreto.
-Mapa _conCaminoSecreto(Mapa original) {
+/// Añade a la izquierda del inicio una pared falsa con el portal al mundo
+/// secreto. Si hay mini jefe, el portal sale cuando se le vence.
+Mapa _conCaminoSecreto(Mapa original, {bool portal = true}) {
   const extra = anchoSecreto;
   final m = Mapa(original.ancho + extra);
   for (var x = 0; x < original.ancho; x++) {
@@ -164,8 +203,12 @@ Mapa _conCaminoSecreto(Mapa original) {
   for (var x = 3; x < extra - 1; x += 2) {
     m.poner(x, suelo - 1, Casilla.moneda);
   }
-  m.poner(1, suelo - 1, Casilla.portal);
-  m.poner(1, suelo - 2, Casilla.portal);
+  if (portal) {
+    m.poner(1, suelo - 1, Casilla.portal);
+    m.poner(1, suelo - 2, Casilla.portal);
+  } else {
+    m.sueloArena = suelo.toDouble();
+  }
   m.inicioX = original.inicioX + extra;
   m.inicioY = original.inicioY;
   m.controlX = original.controlX + extra;
@@ -186,7 +229,7 @@ class _Generador {
       : r = Random(nivel.mundo * 1000 + nivel.numero * 37 + 7),
         d = nivel.dificultad;
 
-  int get largo => (160 + d * 12).round();
+  int get largo => (210 + d * 16).round();
 
   /// Hueco más ancho que se puede saltar (Paco salta unas 5 casillas).
   int get huecoMax => min(4, 2 + (d / 3).floor());
@@ -194,7 +237,7 @@ class _Generador {
   bool azar(double p) => r.nextDouble() < p;
   int entre(int a, int b) => a + r.nextInt(b - a + 1);
 
-  double get probEnemigo => min(0.75, 0.25 + d * 0.05);
+  double get probEnemigo => min(0.85, 0.32 + d * 0.06);
 
   TipoEnemigo enemigoDeSuelo() {
     final w = nivel.mundo;
@@ -257,12 +300,13 @@ class _Generador {
         if (n >= 5 && azar(probEnemigo)) {
           m.enemigos.add(Aparicion(enemigoDeSuelo(), x + n - 2.0, h - 1.0));
         }
-        if (n >= 6 && d >= 1 && azar(0.35)) {
+        if (n >= 6 && d >= 1 && azar(0.5)) {
           m.poner(x + n ~/ 2, h - 1, Casilla.pinchos);
         }
         if (azar(0.45)) {
-          // Plataforma de ladrillos con monedas encima
-          final py = h - 4;
+          // Plataforma de ladrillos con monedas encima (a 3 casillas del
+          // suelo: Paco salta unas 3,2, así que puede subirse)
+          final py = h - 3;
           final pw = entre(3, 5);
           final px = x + entre(0, max(0, n - pw));
           for (var i = 0; i < pw; i++) {
@@ -339,7 +383,7 @@ class _Generador {
   /// Añade perros voladores sobre el nivel.
   void _voladores(int cada) {
     if (d < 1.5) return;
-    final n = (m.ancho / 40 * min(3, d / 3)).round();
+    final n = (m.ancho / 32 * min(3.5, d / 2.5)).round();
     for (var i = 0; i < n; i++) {
       final x = 20 + r.nextInt(m.ancho - 40);
       final sup = m.superficie(x);
@@ -569,7 +613,7 @@ class _Generador {
         m.enemigos.add(Aparicion(
             pez, x + n / 2, entre(techoAlto + 3, piso - 2) * 1.0));
       }
-      if (d >= 2 && azar(0.25)) {
+      if (d >= 2 && azar(0.35)) {
         m.poner(x + 1, piso - 1, Casilla.pinchos);
       }
       for (var i = 0; i < n; i++) {

@@ -23,6 +23,7 @@ const Map<String, String> musicas = {
 /// Canción de cada nivel del juego, según su fondo.
 String musicaDe(Nivel n) {
   if (n.tipo == TipoNivel.agua || n.tema == Temas.marino) return 'mar';
+  if (n.bonus) return 'cielo';
   if (n.mundo == 11) return 'secreto';
   if (n.tipo == TipoNivel.fortaleza) return 'castillo';
   return switch (n.mundo) {

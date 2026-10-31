@@ -77,7 +77,19 @@ class Temas {
     'charcoGigante': charcoGigante,
     'abandonado': abandonado,
     'castilloFinal': castilloFinal,
+    'arcoiris': arcoiris,
   };
+
+  /// El nivel secreto del 3-3.
+  static const arcoiris = Tema(
+    nombre: 'Arcoíris',
+    cieloArriba: Color(0xFFB57BFF),
+    cieloAbajo: Color(0xFFFFD6F0),
+    tierra: Color(0xFFFF8FC8),
+    cesped: Color(0xFFFFF27A),
+    ladrillo: Color(0xFF7BD3FF),
+    decorado: Decorado.nubes,
+  );
 
   static const planicie = Tema(
     nombre: 'Planicie',
@@ -453,21 +465,29 @@ class Nivel {
   /// Nombre de un nivel hecho en el creador de niveles (si no, null).
   final String? creado;
 
+  /// Mini jefe que guarda el camino secreto (3-3): al vencerlo sale el portal.
+  final Jefe? miniJefe;
+
+  /// Nivel secreto del 3-3 (no tiene enemigos gigantes ni sale en el mapa).
+  final bool bonus;
+
   const Nivel(this.mundo, this.numero, this.tipo, this.tema,
       {this.jefe,
       this.fuego = false,
       this.arenaAcuatica = false,
       this.caminoSecreto = false,
-      this.creado});
+      this.creado,
+      this.miniJefe,
+      this.bonus = false});
 
-  bool get esSecreto => mundo == 11;
+  bool get esSecreto => mundo == 11 && !bonus;
 
   int get indice => (mundo - 1) * 8 + (numero - 1);
 
   /// Dificultad de 0 (fácil) a ~10 (muy difícil).
   double get dificultad => (mundo - 1) + (numero - 1) / 8;
 
-  String get titulo => '$mundo-$numero  ${tema.nombre}';
+  String get titulo => bonus ? 'Nivel secreto' : '$mundo-$numero  ${tema.nombre}';
 }
 
 class Mundo {
@@ -518,7 +538,9 @@ final List<Mundo> mundos = [
             proyectil: TipoProyectil.espina)),
   ]),
   Mundo(3, 'La playa', 'Playa arriba y mar abajo.', const Color(0xFF2A9FD6), [
-    for (final n in [1, 2, 3]) Nivel(3, n, _s, Temas.playa),
+    for (final n in [1, 2]) Nivel(3, n, _s, Temas.playa),
+    const Nivel(3, 3, _s, Temas.playa,
+        caminoSecreto: true, miniJefe: miniPerroCangrejo),
     const Nivel(3, 4, _f, Temas.barco,
         jefe: Jefe('Perro Pirata', 3, Color(0xFF9A5A3A),
             Disfraz.pirata, {Habilidad.volar, Habilidad.lanzarArco, Habilidad.disparar},
@@ -632,8 +654,26 @@ final Mundo mundoSecreto = Mundo(11, 'Mundo secreto',
   Nivel(11, 4, _f, Temas.gigante, fuego: true),
 ]);
 
-/// Los 80 niveles en orden, y después los 4 del mundo secreto (sin jefes).
+/// El mini jefe del camino secreto del 3-3.
+const miniPerroCangrejo = Jefe('Mini Perro Cangrejo', 3, Color(0xFFE8553A),
+    Disfraz.pirata, {Habilidad.saltar, Habilidad.lanzarArco},
+    proyectil: TipoProyectil.pescado, tamano: 0.75);
+
+/// El nivel secreto del 3-3 (índice 84): al completarlo se gana el gato
+/// arcoíris. Si Paco pierde, vuelve al 3-3.
+const nivelArcoiris = Nivel(11, 5, _c, Temas.arcoiris, bonus: true);
+
+/// Los 80 niveles en orden, después los 4 del mundo secreto (sin jefes) y
+/// el nivel secreto del 3-3.
 final List<Nivel> todosLosNiveles = [
   for (final m in mundos) ...m.niveles,
   ...mundoSecreto.niveles,
+  nivelArcoiris,
+];
+
+/// Todos los jefes del juego con el nivel donde se vencen (para el creador).
+final List<(Jefe, Nivel)> jefesDelJuego = [
+  for (final n in todosLosNiveles)
+    if (n.jefe != null) (n.jefe!, n)
+    else if (n.miniJefe != null) (n.miniJefe!, n),
 ];
